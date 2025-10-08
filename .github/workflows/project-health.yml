@@ -1,0 +1,260 @@
+name: Project Health & Governance
+
+on:
+   workflow_call:
+      inputs:
+         enforce_conventional_commits:
+            description: "Enforce conventional commit format"
+            required: false
+            type: boolean
+            default: true
+         check_pr_title:
+            description: "Validate PR title format"
+            required: false
+            type: boolean
+            default: true
+         auto_label:
+            description: "Auto-assign labels based on file patterns"
+            required: false
+            type: boolean
+            default: true
+         require_changelog:
+            description: "Require changelog entry for non-trivial changes"
+            required: false
+            type: boolean
+            default: false
+      secrets:
+         GH_TOKEN:
+            required: true
+
+jobs:
+   project-health:
+      name: Project Health Check
+      runs-on: ubuntu-latest
+      permissions:
+         contents: read
+         pull-requests: write
+         issues: write
+         checks: write
+
+      steps:
+         - name: Checkout repository
+           uses: actions/checkout@v4
+           with:
+              fetch-depth: 0
+
+         - name: Setup GitHub CLI
+           run: |
+              # Ensure GitHub CLI is available and authenticated
+              echo "${{ secrets.GH_TOKEN }}" | gh auth login --with-token
+              gh auth status
+              echo "✅ GitHub CLI authenticated"
+
+         - name: Validate PR title format
+           if: ${{ github.event_name == 'pull_request' && inputs.check_pr_title }}
+           run: |
+              echo "🏷️ Validating PR title format..."
+
+              PR_TITLE="${{ github.event.pull_request.title }}"
+              echo "PR Title: $PR_TITLE"
+
+              # Check for conventional commit format: type(scope): description
+              if echo "$PR_TITLE" | grep -qE "^(feat|fix|docs|style|refactor|perf|test|chore|ci|build|revert)(\(.+\))?!?: .+"; then
+                echo "✅ PR title follows conventional commit format"
+                
+                # Add success comment
+                gh pr comment ${{ github.event.pull_request.number }} --body "✅ **PR Title Validation**: Title follows conventional commit format"
+              else
+                echo "❌ PR title does not follow conventional commit format"
+                echo "Expected format: type(scope): description"
+                echo "Examples: feat(auth): add OAuth2 support, fix: resolve memory leak, docs: update API guide"
+                
+                # Add failure comment with guidance
+                gh pr comment ${{ github.event.pull_request.number }} --body "❌ **PR Title Validation Failed**
+
+                Your PR title should follow [conventional commit format](https://www.conventionalcommits.org/):
+
+                **Format**: \`type(scope): description\`
+
+                **Valid types**: feat, fix, docs, style, refactor, perf, test, chore, ci, build, revert
+
+                **Examples**:
+                - \`feat(auth): add OAuth2 integration\`
+                - \`fix: resolve memory leak in user service\`
+                - \`docs: update API documentation\`
+                - \`chore(deps): update dependencies\`
+
+                Please update your PR title to match this format."
+                
+                exit 1
+              fi
+
+         - name: Auto-assign labels
+           if: ${{ github.event_name == 'pull_request' && inputs.auto_label }}
+           run: |
+              echo "🏷️ Auto-assigning labels based on file changes..."
+
+              # Get changed files
+              CHANGED_FILES=$(gh pr diff ${{ github.event.pull_request.number }} --name-only)
+              echo "Changed files:"
+              echo "$CHANGED_FILES"
+
+              LABELS_TO_ADD=""
+
+              # Label assignment rules
+              if echo "$CHANGED_FILES" | grep -q "\.md$\|\.rst$\|docs/"; then
+                LABELS_TO_ADD="$LABELS_TO_ADD documentation"
+              fi
+
+              if echo "$CHANGED_FILES" | grep -q "\.py$"; then
+                LABELS_TO_ADD="$LABELS_TO_ADD python"
+              fi
+
+              if echo "$CHANGED_FILES" | grep -q "\.js$\|\.ts$\|\.jsx$\|\.tsx$\|package\.json"; then
+                LABELS_TO_ADD="$LABELS_TO_ADD javascript"
+              fi
+
+              if echo "$CHANGED_FILES" | grep -q "test.*\.\(py\|js\|ts\)\|.*test\.\(py\|js\|ts\)\|.*\.test\.\(py\|js\|ts\)"; then
+                LABELS_TO_ADD="$LABELS_TO_ADD tests"
+              fi
+
+              if echo "$CHANGED_FILES" | grep -q "\.github/workflows\|\.yml$\|\.yaml$"; then
+                LABELS_TO_ADD="$LABELS_TO_ADD ci/cd"
+              fi
+
+              if echo "$CHANGED_FILES" | grep -q "Dockerfile\|docker-compose\|\.dockerfile"; then
+                LABELS_TO_ADD="$LABELS_TO_ADD docker"
+              fi
+
+              if echo "$CHANGED_FILES" | grep -q "requirements.*\.txt\|pyproject\.toml\|package\.json\|Pipfile"; then
+                LABELS_TO_ADD="$LABELS_TO_ADD dependencies"
+              fi
+
+              # Add size labels based on change volume
+              ADDITIONS=$(gh pr diff ${{ github.event.pull_request.number }} --stat | grep -o "[0-9]* insertion" | grep -o "[0-9]*" || echo "0")
+              DELETIONS=$(gh pr diff ${{ github.event.pull_request.number }} --stat | grep -o "[0-9]* deletion" | grep -o "[0-9]*" || echo "0")
+              TOTAL_CHANGES=$((ADDITIONS + DELETIONS))
+
+              if [ "$TOTAL_CHANGES" -lt 10 ]; then
+                LABELS_TO_ADD="$LABELS_TO_ADD size/XS"
+              elif [ "$TOTAL_CHANGES" -lt 30 ]; then
+                LABELS_TO_ADD="$LABELS_TO_ADD size/S"
+              elif [ "$TOTAL_CHANGES" -lt 100 ]; then
+                LABELS_TO_ADD="$LABELS_TO_ADD size/M"
+              elif [ "$TOTAL_CHANGES" -lt 500 ]; then
+                LABELS_TO_ADD="$LABELS_TO_ADD size/L"
+              else
+                LABELS_TO_ADD="$LABELS_TO_ADD size/XL"
+              fi
+
+              # Apply labels
+              if [ -n "$LABELS_TO_ADD" ]; then
+                echo "Adding labels: $LABELS_TO_ADD"
+                for label in $LABELS_TO_ADD; do
+                  gh pr edit ${{ github.event.pull_request.number }} --add-label "$label" || echo "⚠️ Could not add label: $label"
+                done
+                echo "✅ Auto-labeling complete"
+              else
+                echo "ℹ️ No automatic labels to assign"
+              fi
+
+         - name: Check for changelog entry
+           if: ${{ github.event_name == 'pull_request' && inputs.require_changelog }}
+           run: |
+              echo "📝 Checking for changelog entry..."
+
+              # Skip trivial changes
+              PR_TITLE="${{ github.event.pull_request.title }}"
+              if echo "$PR_TITLE" | grep -qE "^(docs|chore|style|ci)\b"; then
+                echo "ℹ️ Skipping changelog check for maintenance PR"
+                exit 0
+              fi
+
+              # Check if changelog files were modified
+              CHANGED_FILES=$(gh pr diff ${{ github.event.pull_request.number }} --name-only)
+
+              if echo "$CHANGED_FILES" | grep -qE "(CHANGELOG|HISTORY|RELEASES|NEWS)\.(md|rst|txt)"; then
+                echo "✅ Changelog file updated"
+                gh pr comment ${{ github.event.pull_request.number }} --body "✅ **Changelog Check**: Changelog has been updated"
+              else
+                echo "⚠️ No changelog entry found"
+                gh pr comment ${{ github.event.pull_request.number }} --body "⚠️ **Changelog Check**: Consider adding an entry to the changelog for this change.
+
+                If this change affects users or is a significant feature/fix, please update:
+                - \`CHANGELOG.md\`
+                - \`HISTORY.md\`
+                - \`RELEASES.md\`
+                
+                If this is a trivial change (docs, tests, internal refactoring), you can ignore this notice."
+              fi
+
+         - name: Check commit message format
+           if: ${{ github.event_name == 'pull_request' && inputs.enforce_conventional_commits }}
+           run: |
+              echo "📝 Validating commit message format..."
+
+              # Get all commits in this PR
+              COMMITS=$(gh pr view ${{ github.event.pull_request.number }} --json commits --jq '.commits[].messageHeadline')
+
+              echo "Checking commits:"
+              echo "$COMMITS"
+
+              INVALID_COMMITS=""
+              while IFS= read -r commit_msg; do
+                if [ -n "$commit_msg" ]; then
+                  if echo "$commit_msg" | grep -qE "^(feat|fix|docs|style|refactor|perf|test|chore|ci|build|revert)(\(.+\))?!?: .+"; then
+                    echo "✅ Valid: $commit_msg"
+                  else
+                    echo "❌ Invalid: $commit_msg"
+                    INVALID_COMMITS="$INVALID_COMMITS\n- $commit_msg"
+                  fi
+                fi
+              done <<< "$COMMITS"
+
+              if [ -n "$INVALID_COMMITS" ]; then
+                echo "❌ Found commits that don't follow conventional format"
+                gh pr comment ${{ github.event.pull_request.number }} --body "❌ **Commit Message Validation Failed**
+
+                The following commits don't follow [conventional commit format](https://www.conventionalcommits.org/):
+                $INVALID_COMMITS
+
+                **Expected format**: \`type(scope): description\`
+                
+                Consider squashing commits or updating commit messages before merging."
+                
+                # Don't fail the build, just warn
+                echo "::warning::Some commits don't follow conventional format"
+              else
+                echo "✅ All commits follow conventional format"
+              fi
+
+         - name: Generate project health report
+           if: always()
+           run: |
+              echo "## 🏥 Project Health Report" >> $GITHUB_STEP_SUMMARY
+              echo "" >> $GITHUB_STEP_SUMMARY
+
+              if [ "${{ github.event_name }}" = "pull_request" ]; then
+                echo "**PR Health Check**: #${{ github.event.pull_request.number }}" >> $GITHUB_STEP_SUMMARY
+                echo "**PR Title**: ${{ github.event.pull_request.title }}" >> $GITHUB_STEP_SUMMARY
+                echo "" >> $GITHUB_STEP_SUMMARY
+              fi
+
+              echo "**Governance Checks**:" >> $GITHUB_STEP_SUMMARY
+              if [ "${{ inputs.check_pr_title }}" = "true" ]; then
+                echo "- 🏷️ PR title format validation" >> $GITHUB_STEP_SUMMARY
+              fi
+              if [ "${{ inputs.auto_label }}" = "true" ]; then
+                echo "- 🏷️ Automatic label assignment" >> $GITHUB_STEP_SUMMARY
+              fi
+              if [ "${{ inputs.require_changelog }}" = "true" ]; then
+                echo "- 📝 Changelog requirement check" >> $GITHUB_STEP_SUMMARY
+              fi
+              if [ "${{ inputs.enforce_conventional_commits }}" = "true" ]; then
+                echo "- 📝 Conventional commit validation" >> $GITHUB_STEP_SUMMARY
+              fi
+
+              echo "" >> $GITHUB_STEP_SUMMARY
+              echo "**Workflow**: \`project-health.yml@v1\`" >> $GITHUB_STEP_SUMMARY
+              echo "" >> $GITHUB_STEP_SUMMARY
+              echo "_Maintaining TAGS ecosystem governance standards_" >> $GITHUB_STEP_SUMMARY

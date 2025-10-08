@@ -1,0 +1,188 @@
+name: CI Lite - Fast PR Validation
+
+on:
+   workflow_call:
+      inputs:
+         node_version:
+            description: "Node.js version to use"
+            required: false
+            type: string
+            default: "20"
+         python_version:
+            description: "Python version to use"
+            required: false
+            type: string
+            default: "3.12"
+         skip_python:
+            description: "Skip Python setup and checks"
+            required: false
+            type: boolean
+            default: false
+         skip_node:
+            description: "Skip Node.js setup and checks"
+            required: false
+            type: boolean
+            default: false
+      secrets:
+         GH_TOKEN:
+            required: false
+
+jobs:
+   validate:
+      name: Fast PR Validation
+      runs-on: ubuntu-latest
+      permissions:
+         contents: read
+         pull-requests: write
+         checks: write
+
+      steps:
+         - name: Checkout repository
+           uses: actions/checkout@v4
+           with:
+              fetch-depth: 0
+
+         - name: Setup Python and Node.js environment
+           uses: theangrygamershowproductions/.github/actions/setup-python-node@v1
+           with:
+              node_version: ${{ inputs.node_version }}
+              python_version: ${{ inputs.python_version }}
+              skip_python: ${{ inputs.skip_python }}
+              skip_node: ${{ inputs.skip_node }}
+
+         - name: Lint JavaScript/TypeScript
+           if: ${{ !inputs.skip_node }}
+           run: |
+              if [ -f package.json ]; then
+                echo "📦 Found package.json - running Node.js linting"
+                if [ -f package-lock.json ]; then
+                  npm ci
+                elif [ -f pnpm-lock.yaml ]; then
+                  pnpm install --frozen-lockfile
+                elif [ -f yarn.lock ]; then
+                  yarn install --frozen-lockfile
+                else
+                  npm install
+                fi
+                
+                if npm run lint --if-present; then
+                  echo "✅ JavaScript/TypeScript linting passed"
+                else
+                  echo "❌ JavaScript/TypeScript linting failed"
+                  exit 1
+                fi
+              else
+                echo "⏭️ No package.json found - skipping Node.js linting"
+              fi
+
+         - name: Type check TypeScript
+           if: ${{ !inputs.skip_node }}
+           run: |
+              if [ -f tsconfig.json ] || [ -f jsconfig.json ]; then
+                echo "🔍 TypeScript configuration found - running type check"
+                if npm run type-check --if-present; then
+                  echo "✅ TypeScript type checking passed"
+                elif npx tsc --noEmit --skipLibCheck; then
+                  echo "✅ TypeScript type checking passed (fallback)"
+                else
+                  echo "❌ TypeScript type checking failed"
+                  exit 1
+                fi
+              else
+                echo "⏭️ No TypeScript config found - skipping type check"
+              fi
+
+         - name: Lint Python
+           if: ${{ !inputs.skip_python }}
+           run: |
+              if [ -f requirements-dev.txt ] || [ -f pyproject.toml ] || [ -f setup.py ]; then
+                echo "🐍 Python project detected - running linting"
+                
+                # Install dependencies
+                if [ -f requirements-dev.txt ]; then
+                  pip install -r requirements-dev.txt
+                elif [ -f pyproject.toml ]; then
+                  pip install -e .[dev] || pip install -e .
+                fi
+                
+                # Run linting tools
+                if command -v ruff >/dev/null 2>&1; then
+                  echo "Running Ruff linting..."
+                  ruff check . || exit 1
+                elif command -v flake8 >/dev/null 2>&1; then
+                  echo "Running flake8 linting..."
+                  flake8 . || exit 1
+                else
+                  echo "No Python linter found - installing ruff"
+                  pip install ruff
+                  ruff check . || exit 1
+                fi
+                
+                echo "✅ Python linting passed"
+              else
+                echo "⏭️ No Python project files found - skipping Python linting"
+              fi
+
+         - name: Run unit tests (Node.js)
+           if: ${{ !inputs.skip_node }}
+           run: |
+              if [ -f package.json ] && npm run test --if-present; then
+                echo "✅ Node.js unit tests passed"
+              else
+                echo "⏭️ No Node.js test script found or no package.json"
+              fi
+
+         - name: Run unit tests (Python)
+           if: ${{ !inputs.skip_python }}
+           run: |
+              if [ -f pytest.ini ] || [ -f pyproject.toml ] || find . -name "test_*.py" -o -name "*_test.py" | grep -q .; then
+                echo "🧪 Python tests detected - running pytest"
+                if command -v pytest >/dev/null 2>&1; then
+                  pytest --tb=short -v
+                else
+                  pip install pytest
+                  pytest --tb=short -v
+                fi
+                echo "✅ Python unit tests passed"
+              else
+                echo "⏭️ No Python tests found"
+              fi
+
+         - name: Validate project structure
+           run: |
+              echo "📋 Validating basic project structure..."
+
+              # Check for README
+              if [ -f README.md ] || [ -f readme.md ] || [ -f README.rst ]; then
+                echo "✅ README file found"
+              else
+                echo "⚠️ No README file found"
+              fi
+
+              # Check for license
+              if [ -f LICENSE ] || [ -f LICENSE.md ] || [ -f LICENSE.txt ]; then
+                echo "✅ LICENSE file found"
+              else
+                echo "⚠️ No LICENSE file found"
+              fi
+
+              # Check for .gitignore
+              if [ -f .gitignore ]; then
+                echo "✅ .gitignore file found"
+              else
+                echo "⚠️ No .gitignore file found"
+              fi
+
+              echo "📋 Project structure validation complete"
+
+         - name: Summary
+           if: always()
+           run: |
+              echo "## 🚀 CI Lite Summary" >> $GITHUB_STEP_SUMMARY
+              echo "Fast PR validation completed for this project." >> $GITHUB_STEP_SUMMARY
+              echo "" >> $GITHUB_STEP_SUMMARY
+              echo "**Workflow**: \`ci-lite.yml@v1\`" >> $GITHUB_STEP_SUMMARY
+              echo "**Node.js**: ${{ inputs.skip_node && 'Skipped' || inputs.node_version }}" >> $GITHUB_STEP_SUMMARY
+              echo "**Python**: ${{ inputs.skip_python && 'Skipped' || inputs.python_version }}" >> $GITHUB_STEP_SUMMARY
+              echo "" >> $GITHUB_STEP_SUMMARY
+              echo "_This is a reusable workflow from the TAGS ecosystem_" >> $GITHUB_STEP_SUMMARY

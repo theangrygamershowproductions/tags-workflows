@@ -1,0 +1,90 @@
+name: "Setup Python and Node.js Environment"
+description: "Sets up Python, Node.js, and package managers with caching for TAGS ecosystem"
+
+inputs:
+  node_version:
+    description: "Node.js version to use"
+    required: false
+    default: "20"
+  python_version:
+    description: "Python version to use"
+    required: false
+    default: "3.12"
+  skip_python:
+    description: "Skip Python setup"
+    required: false
+    default: "false"
+  skip_node:
+    description: "Skip Node.js setup"
+    required: false
+    default: "false"
+
+runs:
+  using: "composite"
+  steps:
+    - name: Setup Node.js
+      if: ${{ inputs.skip_node != 'true' }}
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ inputs.node_version }}
+        cache: "npm"
+        cache-dependency-path: |
+          package-lock.json
+          pnpm-lock.yaml
+          yarn.lock
+
+    - name: Setup pnpm
+      if: ${{ inputs.skip_node != 'true' && hashFiles('pnpm-lock.yaml') }}
+      uses: pnpm/action-setup@v4
+      with:
+        version: latest
+
+    - name: Setup Python
+      if: ${{ inputs.skip_python != 'true' }}
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ inputs.python_version }}
+        cache: "pip"
+        cache-dependency-path: |
+          requirements*.txt
+          pyproject.toml
+          setup.py
+
+    - name: Cache Python virtual environments
+      if: ${{ inputs.skip_python != 'true' }}
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cache/pip
+          ~/.local/share/virtualenvs
+          .venv
+          venv
+        key: ${{ runner.os }}-python-${{ inputs.python_version }}-${{ hashFiles('requirements*.txt', 'pyproject.toml', 'setup.py') }}
+        restore-keys: |
+          ${{ runner.os }}-python-${{ inputs.python_version }}-
+          ${{ runner.os }}-python-
+
+    - name: Install Python build tools
+      if: ${{ inputs.skip_python != 'true' }}
+      shell: bash
+      run: |
+        python -m pip install --upgrade pip setuptools wheel
+        echo "✅ Python build tools installed"
+
+    - name: Display environment info
+      shell: bash
+      run: |
+        echo "## 🔧 Environment Setup Complete" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        if [ "${{ inputs.skip_node }}" != "true" ]; then
+          echo "**Node.js**: $(node --version)" >> $GITHUB_STEP_SUMMARY
+          echo "**npm**: $(npm --version)" >> $GITHUB_STEP_SUMMARY
+          if command -v pnpm >/dev/null 2>&1; then
+            echo "**pnpm**: $(pnpm --version)" >> $GITHUB_STEP_SUMMARY
+          fi
+        fi
+        if [ "${{ inputs.skip_python }}" != "true" ]; then
+          echo "**Python**: $(python --version)" >> $GITHUB_STEP_SUMMARY
+          echo "**pip**: $(pip --version)" >> $GITHUB_STEP_SUMMARY
+        fi
+        echo "" >> $GITHUB_STEP_SUMMARY
