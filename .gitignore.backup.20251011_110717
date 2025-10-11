@@ -1,0 +1,425 @@
+# TAGS Ecosystem .gitignore Template
+# This is the ORGANIZATIONAL STANDARD for all TAGS repositories
+# DO NOT MODIFY THIS FILE - it is maintained centrally
+# Last Updated: 2025-10-11
+
+# ===== CRITICAL - VIRTUAL ENVIRONMENTS (NEVER COMMIT) =====
+# Python virtual environments - ALL variations
+.venv/
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+ENV/
+env.bak/
+venv.bak/
+.venv.bak/
+venv.bak/
+# Recursive patterns for subdirectories
+*/.venv/
+*/venv/
+*/env/
+*/ENV/
+# Specific patterns
+.venv*/
+venv*/
+env*/
+ENV*/
+# Conda environments
+conda-env/
+*/conda-env/
+# Pipenv
+Pipfile.lock
+# Poetry
+poetry.lock
+# Pip
+requirements.txt
+# ===== END VIRTUAL ENVIRONMENTS =====
+
+# ===== NODE.JS (NEVER COMMIT) =====
+node_modules/
+*/node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.npm
+.yarn-integrity
+# ===== END NODE.JS =====
+
+# ===== BYTE-COMPILED / OPTIMIZED / DLL FILES =====
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# ===== DISTRIBUTION / PACKAGING =====
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# ===== PYINSTALLER =====
+*.manifest
+*.spec
+
+# ===== UNIT TEST / COVERAGE REPORTS =====
+htmlcov/
+.tox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+.hypothesis/
+.pytest_cache/
+
+# ===== TRANSLATIONS =====
+*.mo
+*.pot
+
+# ===== DJANGO =====
+*.log
+local_settings.py
+db.sqlite3
+
+# ===== FLASK =====
+instance/
+.webassets-cache
+
+# ===== SCRAPY =====
+.scrapy
+
+# ===== SPHINX DOCUMENTATION =====
+docs/_build/
+
+# ===== PYBUILDER =====
+target/
+
+# ===== JUPYTER NOTEBOOK =====
+.ipynb_checkpoints
+
+# ===== IPYTHON =====
+profile_default/
+ipython_config.py
+
+# ===== PYENV =====
+.python-version
+
+# ===== CELERY BEAT SCHEDULE FILE =====
+celerybeat-schedule
+
+# ===== SAGE MATH NOTEBOOKS =====
+*.sage.py
+
+# ===== ENVIRONMENTS =====
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+.venv.bak/
+venv.bak/
+
+# ===== SPYDER PROJECT SETTINGS =====
+.spyderproject
+.spyproject
+
+# ===== ROPE PROJECT SETTINGS =====
+.ropeproject
+
+# ===== MKDOCS DOCUMENTATION =====
+/site
+
+# ===== MYPY =====
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# ===== PYRE-TYPECHECKER =====
+.pyre/
+
+# ===== IDE / EDITOR FILES =====
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.project
+.pydevproject
+.settings/
+.vscode/settings.json
+
+# ===== OS GENERATED FILES =====
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+*~
+
+# ===== LOGS AND DATABASES =====
+*.log
+logs/
+*.sqlite
+*.sqlite3
+*.db
+
+# ===== RUNTIME DATA =====
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# ===== COVERAGE REPORT DIRECTORY =====
+htmlcov/
+
+# ===== SENSITIVE FILES =====
+*.pem
+*.key
+*.crt
+*.cer
+.env.local
+.env.production
+.env.staging
+.env.development
+.env.test
+secrets.json
+config/secrets.*
+config/credentials.*
+*.token
+*.tokens
+
+# ===== TEMPORARY FILES =====
+*.tmp
+*.temp
+.cache/
+.tmp/
+temp/
+
+# ===== BACKUP FILES =====
+*.bak
+*.backup
+*.orig
+*.old
+*~
+
+# ===== TAGS ECOSYSTEM SPECIFIC =====
+.tags/
+tags-*.tmp
+TAGS-*.tmp
+# Client project backups
+*_backup/
+*_backups_*/
+shell_emoji_fixes_*/
+document_control_backups_*/
+final_emoji_cleanup_*/
+# TAGS automation artifacts
+automation_logs/
+*.automation
+
+# ===== DOCKER =====
+.dockerignore
+docker-compose.override.yml
+.env.docker
+
+# ===== KUBERNETES =====
+*.yaml.bak
+*.yml.bak
+
+# ===== CI/CD =====
+.github/workflows/*.tmp
+.github/workflows/*-backup.yml
+
+# ===== ARCHIVED PROJECTS =====
+archive/
+archived/
+obsolete/
+
+# ===== LARGE DATA FILES =====
+*.zip
+*.tar.gz
+*.7z
+*.rar
+data/large/
+data/raw/
+*.csv
+*.xlsx
+*.xls
+*.parquet
+*.feather
+*.pkl
+*.pickle
+
+# ===== MODEL FILES =====
+*.h5
+*.pb
+*.pkl
+*.joblib
+*.model
+models/
+checkpoints/
+
+# ===== API KEYS AND TOKENS =====
+.api_key
+.api_keys
+.token
+.tokens
+.secret
+.secrets
+key.json
+keys.json
+credentials.json
+service-account.json
+
+# ===== LOCAL CONFIGURATION =====
+config/local.*
+config/development.*
+config/test.*
+*.local
+*.development
+*.test
+
+# ===== DEBUG FILES =====
+debug.log
+debug/
+*.debug
+debug-*.log
+
+# ===== PERFORMANCE PROFILING =====
+*.prof
+*.lprof
+profile/
+profiling/
+
+# ===== TESTING ARTIFACTS =====
+.coverage
+coverage.xml
+htmlcov/
+.tox/
+.cache/
+.pytest_cache/
+test-results/
+test-reports/
+junit.xml
+allure-results/
+
+# ===== BUILD ARTIFACTS =====
+build/
+dist/
+*.egg-info/
+*.whl
+*.tar.gz
+target/
+out/
+bin/
+obj/
+
+# ===== DOCUMENTATION BUILD =====
+docs/_build/
+docs/build/
+site/
+_book/
+
+# ===== LINTING AND FORMATTING =====
+.ruff_cache/
+.black
+.isort.cfg.backup
+
+# ===== PRE-COMMIT =====
+.pre-commit-config.yaml.backup
+.pre-commit-hooks-cache/
+
+# ===== SECURITY SCANNING =====
+security-scan-results/
+vulnerability-reports/
+
+# ===== MONITORING AND LOGGING =====
+logs/
+*.log.*
+monitoring/
+metrics/
+traces/
+
+# ===== BACKUP AND SNAPSHOT =====
+*.snapshot
+*.backup.sql
+*.dump
+database_backup/
+
+# ===== EXPERIMENTAL FEATURES =====
+experimental/
+feature-flags/
+beta/
+
+# ===== THIRD-PARTY INTEGRATIONS =====
+integrations/
+third-party/
+vendor/
+
+# ===== DEPRECATED CODE =====
+deprecated/
+legacy/
+old/
+
+# ===== TAGS META SPECIFIC =====
+# These patterns are specific to TAGS-META repository structure
+ecosystem/*/node_modules/
+ecosystem/*/.venv/
+ecosystem/*/venv/
+ecosystem/*/env/
+ecosystem/*/ENV/
+ecosystem/*/build/
+ecosystem/*/dist/
+ecosystem/*/.next/
+ecosystem/*/out/
+ecosystem/*/.nuxt/
+ecosystem/*/.output/
+ecosystem/*/.vercel/
+ecosystem/*/.netlify/
+
+# ===== END TAGS ECOSYSTEM =====
+
+# ===== FINAL WARNING =====
+# IF YOU ARE ADDING NEW PATTERNS TO THIS FILE:
+# 1. This is the ORGANIZATIONAL STANDARD
+# 2. Changes must be approved by TAGS governance
+# 3. Update all repositories that use this template
+# 4. Test thoroughly before committing
+# ===== END WARNING =====

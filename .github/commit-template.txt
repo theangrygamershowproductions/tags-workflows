@@ -1,0 +1,26 @@
+# AI Context Management Commit Template
+
+# Title: Brief summary (50 chars or less)
+
+# Body: Explain what and why (wrap at 72 chars)
+# - What changes were made?
+# - Why were they necessary?
+# - What was the context/problem being solved?
+
+# AI Context Changes (if applicable):
+# - Instruction files modified: 
+# - Templates updated:
+# - Quality standards changed:
+
+# Testing:
+# - [ ] Instruction quality checks pass
+# - [ ] Examples are complete and accurate
+# - [ ] Dependencies are documented
+# - [ ] Acceptance criteria are clear
+
+# Related:
+# - Issues: 
+# - PRs: 
+# - Docs: 
+
+# Reminder: Keep commits focused and atomic for better AI understanding
