@@ -1,14 +1,21 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2025 The Angry Gamer Show Productions
+
 #!/bin/bash
+
+# Auto-detect TAGS root directory
+TAGS_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+
 # Pre-commit hook to enforce AI context management standards
 # Version: 1.0 | Created: 2025-01-10
 
 # Source color utilities
-source "/home/potato/TAGS/shared/scripts/color_utils.sh"
+source "${TAGS_ROOT}/shared/scripts/color_utils.sh"
 
 # Centralized logging setup
 SCRIPT_NAME="check_instruction_quality.sh"
 LOG_DIR="../logs"
-TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
+TIMESTAMP=$(date "%Y%m%d_%H%M%S")
 LOG_FILE="$LOG_DIR/${SCRIPT_NAME%.*}_$TIMESTAMP.log"
 
 # Create logs directory if it doesn't exist
@@ -46,16 +53,16 @@ log_info() {
 
 log_warning() {
     echo -e "${YELLOW}⚠${NC} $1"
-    ((WARNINGS++))
+    ((WARNINGS))
 }
 
 log_error() {
-    echo -e "${RED}✗${NC} $1"
-    ((ERRORS++))
+    echo -e "${RED}${NC} $1"
+    ((ERRORS))
 }
 
 log_success() {
-    echo -e "${GREEN}✓${NC} $1"
+    echo -e "${GREEN}${NC} $1"
 }
 
 # Check if file is an instruction file
@@ -107,7 +114,7 @@ check_required_sections() {
     
     for section in "${REQUIRED_SECTIONS[@]}"; do
         if ! grep -qi "## $section\|# $section" "$file"; then
-            missing_sections+=("$section")
+            missing_sections=("$section")
         fi
     done
     
@@ -160,7 +167,7 @@ check_line_length() {
     local line_num=0
     
     while IFS= read -r line; do
-        ((line_num++))
+        ((line_num))
         if [ ${#line} -gt $MAX_LINE_LENGTH ]; then
             log_warning "$file:$line_num: Line exceeds $MAX_LINE_LENGTH characters (${#line})"
         fi
@@ -186,7 +193,7 @@ check_file() {
     fi
     
     log_info "Checking $file..."
-    ((FILES_CHECKED++))
+    ((FILES_CHECKED))
     
     # Run all checks
     check_metadata "$file"
@@ -209,14 +216,14 @@ main() {
         if git rev-parse --git-dir >/dev/null 2>&1; then
             while IFS= read -r file; do
                 if is_instruction_file "$file"; then
-                    files_to_check+=("$file")
+                    files_to_check=("$file")
                 fi
             done < <(git ls-files)
         else
             # Fallback to find command
             while IFS= read -r -d '' file; do
                 if is_instruction_file "$file"; then
-                    files_to_check+=("$file")
+                    files_to_check=("$file")
                 fi
             done < <(find . -name "*.md" -o -name "*.txt" -o -name "*.rst" -print0 2>/dev/null)
         fi
@@ -240,13 +247,13 @@ main() {
     echo "  Errors: $ERRORS"
     
     if [ $ERRORS -gt 0 ]; then
-        error_msg " Quality check failed with $ERRORS errors"
+        error " Quality check failed with $ERRORS errors"
         exit 1
     elif [ $WARNINGS -gt 0 ]; then
-        debug_msg "  Quality check passed with $WARNINGS warnings"
+        debug "  Quality check passed with $WARNINGS warnings"
         exit 0
     else
-        success_msg " All quality checks passed!"
+        success " All quality checks passed!"
         exit 0
     fi
 }

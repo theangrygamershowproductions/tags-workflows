@@ -1,3 +1,10 @@
+---
+consolidation_priority: P3
+content_uniqueness_score: 4
+merge_candidate: false
+similarity_group: docs-general
+updated_at: 2025-10-27
+---
 # Contributing to tags-workflows
 
 We welcome contributions to tags-workflows! This document provides guidelines for contributing to this repository.

@@ -1,8 +1,15 @@
+---
+consolidation_priority: P3
+content_uniqueness_score: 4
+merge_candidate: false
+similarity_group: docs-general
+updated_at: 2025-10-27
+---
 # TAGS Public Reusable Workflows
 
 This repository contains **generic, open-source reusable GitHub Actions workflows** for The Angry Gamer Show Productions ecosystem. These workflows provide standardized CI/CD patterns that can be used by any public repository in the organization.
 
-## 🚀 Available Workflows
+##  Available Workflows
 
 ### Core CI Workflows
 
@@ -38,16 +45,16 @@ jobs:
 
 For advanced AI-powered code analysis and premium features, see our private `AI-CI-Toolkit` (organization members only).
 
-## 📋 Versioning
+##  Versioning
 
 - **`@shared-ci-v1`** - Stable public API, recommended for production use
 - **`@main`** - Latest development version (use with caution)
 
-## 🤝 Contributing
+##  Contributing
 
 These workflows are maintained as part of the TAGS ecosystem. For issues or enhancements, please open an issue in this repository.
 
-## 📄 License
+## FILE: License
 
 MIT License - See [LICENSE](LICENSE) for details.
 

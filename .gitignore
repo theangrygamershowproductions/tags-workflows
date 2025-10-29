@@ -7,7 +7,6 @@
 # Python virtual environments - ALL variations
 .venv/
 venv/
-__pycache__/
 *.pyc
 *.pyo
 *.pyd
@@ -40,8 +39,7 @@ requirements.txt
 # ===== END VIRTUAL ENVIRONMENTS =====
 
 # ===== NODE.JS (NEVER COMMIT) =====
-node_modules/
-*/node_modules/
+**/node_modules/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
@@ -50,7 +48,6 @@ yarn-error.log*
 # ===== END NODE.JS =====
 
 # ===== BYTE-COMPILED / OPTIMIZED / DLL FILES =====
-__pycache__/
 *.py[cod]
 *$py.class
 *.so
@@ -400,7 +397,6 @@ old/
 
 # ===== TAGS META SPECIFIC =====
 # These patterns are specific to TAGS-META repository structure
-ecosystem/*/node_modules/
 ecosystem/*/.venv/
 ecosystem/*/venv/
 ecosystem/*/env/
@@ -423,3 +419,52 @@ ecosystem/*/.netlify/
 # 3. Update all repositories that use this template
 # 4. Test thoroughly before committing
 # ===== END WARNING =====
+
+# POTATO POLICY MANDATORY SECURITY EXCLUSIONS
+# These entries MUST be present in ALL TAGS repositories
+
+# Environment files (CRITICAL - never commit)
+.env
+.env.*
+.env.local
+.env.production
+.env.staging
+.env.development
+.env.test
+.env.docker
+
+# Credential and secret files (CRITICAL - never commit)
+*.pem
+*.key
+*.p12
+*.pfx
+secrets.json
+config/secrets.*
+config/credentials.*
+credentials.json
+.secret
+.secrets
+.credentials
+
+# Potato Policy protected files (CRITICAL - never commit)
+Potato.md
+**/Potato.md
+
+# Token and API key files (CRITICAL - never commit)
+*.token
+api-keys.*
+access-tokens.*
+.bitwarden-session
+.bws-session
+
+# SSH and security keys (CRITICAL - never commit)
+id_rsa
+id_dsa
+id_ecdsa
+id_ed25519
+*.pub
+known_hosts
+authorized_keys
+
+# END POTATO POLICY MANDATORY ENTRIES
+**/__pycache__/
