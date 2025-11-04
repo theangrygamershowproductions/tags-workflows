@@ -1,0 +1,12 @@
+# CODEOWNERS bootstrap (teams + temporary user fallback)
+# Replace @reesey275 with your handle once teams are active, then remove it.
+# Paths are examples—edit to match your repo layout.
+
+# Infra / MCP ops
+ops/mcp_*   @theangrygamershowproductions/security-team @reesey275
+
+# Workflows
+.github/workflows/*  @theangrygamershowproductions/platform-infra @reesey275
+
+# Releases
+release/*    @theangrygamershowproductions/release-managers @reesey275
