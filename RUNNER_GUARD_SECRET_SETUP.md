@@ -73,7 +73,48 @@ GET /orgs/{org}/actions/runners
 
 The default `GITHUB_TOKEN` provided to workflows **does NOT** have this permission, even with `permissions: actions: read`.
 
-## Solution: Create GitHub App or PAT
+---
+
+## Bootstrap Credential Architecture
+
+**Two separate token worlds** (commonly confused):
+
+1. **Bitwarden Secrets Manager (BWS) access token**
+   - Purpose: Authenticate to Bitwarden to fetch secrets
+   - Scoped by: Bitwarden machine account permissions
+   - Used by: `bitwarden/sm-action@v2` or TAGS `tags-bitwarden` MCP server
+
+2. **GitHub API auth token** (GitHub App installation token or PAT)
+   - Purpose: Authenticate to GitHub org runner API
+   - Scoped by: GitHub App permissions or PAT scopes
+   - Used by: `gh` CLI or GitHub API calls
+
+**Key insight**: A BWS token lets you *retrieve* GitHub App credentials from Bitwarden. You still need to *mint* an installation token from those credentials to call GitHub APIs.
+
+### Where to Store Bootstrap Credentials
+
+**If using Option B (backup-capable) with Bitwarden bootstrap**:
+
+Store `BW_ACCESS_TOKEN` as an **organization-level secret** restricted to selected repos:
+
+```bash
+# Create org secret restricted to specific repos
+gh secret set BW_ACCESS_TOKEN \
+  --org theangrygamershowproductions \
+  --repos tags-workflows,tags-mcp-servers \
+  --body "<BWS_ACCESS_TOKEN_VALUE>"
+```
+
+**Why org-level with repo restrictions** ([Docs](https://docs.github.com/en/actions/security-guides/using-secrets-in-github-actions#creating-secrets-for-an-organization)):
+- Centralized management (one secret, not per-repo duplication)
+- Least privilege (restrict access to only repos that need it)
+- Audit trail (org-level secret access logs)
+
+**Alternative**: Repo-level secrets for stricter isolation, but requires per-repo secret management.
+
+---
+
+## Solution: GitHub App Authentication
 
 ### Option 1: GitHub App (Recommended)
 
@@ -411,6 +452,118 @@ gh workflow run runner-version-guard.yml --repo tags-workflows
 
 ---
 
+## Option C: OIDC Trust Bridge (Advanced)
+
+**For zero static secrets in GitHub with GitHub-hosted runner support**
+
+### Architecture
+
+Use GitHub's OIDC identity provider to authenticate to TAGS infrastructure and fetch secrets dynamically:
+
+```
+GitHub-hosted runner → OIDC token → tags-authentication service → BWS access → GitHub App credentials
+```
+
+**Benefits**:
+- Zero static secrets in GitHub (not even bootstrap token)
+- Short-lived OIDC tokens (automatic rotation)
+- Audit trail via OIDC claims + TAGS auth logs
+
+**Tradeoffs**:
+- Requires TAGS `tags-authentication` service exposed with OIDC trust
+- Additional infrastructure (Cloudflare Tunnel or similar)
+- More complex trust chain to debug
+
+### Prerequisites
+
+- `tags-authentication` server exposed over HTTPS with OIDC endpoint
+- Trust policy configured: GitHub org → TAGS auth service
+- BWS access delegation: TAGS auth can fetch secrets on behalf of OIDC identity
+
+### 1. Configure GitHub OIDC Trust
+
+Add to `runner-version-guard.yml`:
+
+```yaml
+jobs:
+  audit-runners:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write  # Required for OIDC token request
+      contents: read
+    
+    steps:
+      - name: Authenticate to TAGS via OIDC
+        id: tags-auth
+        run: |
+          # Request OIDC token from GitHub
+          OIDC_TOKEN=$(curl -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+            "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=tags-authentication" | jq -r .value)
+          
+          # Exchange OIDC token for TAGS session
+          TAGS_SESSION=$(curl -X POST https://auth.tags.internal/oidc/github \
+            -H "Authorization: Bearer $OIDC_TOKEN" \
+            -H "Content-Type: application/json" | jq -r .session_token)
+          
+          echo "session-token=$TAGS_SESSION" >> $GITHUB_OUTPUT
+      
+      - name: Fetch GitHub App credentials via TAGS
+        id: fetch-creds
+        env:
+          TAGS_SESSION: ${{ steps.tags-auth.outputs.session-token }}
+        run: |
+          # Use TAGS session to fetch secrets from Bitwarden
+          APP_ID=$(curl -H "Authorization: Bearer $TAGS_SESSION" \
+            https://auth.tags.internal/secrets/ORG_RUNNER_APP_ID | jq -r .value)
+          
+          # ... fetch INSTALLATION_ID and PRIVATE_KEY similarly
+          
+          echo "app-id=$APP_ID" >> $GITHUB_OUTPUT
+      
+      - name: Generate GitHub App installation token
+        id: app-token
+        uses: actions/create-github-app-token@31c86eb3b33c9b601a1f60f98dcbfd1d70f379b4
+        with:
+          app-id: ${{ steps.fetch-creds.outputs.app-id }}
+          private-key: ${{ steps.fetch-creds.outputs.private-key }}
+          owner: theangrygamershowproductions
+```
+
+### 2. Configure TAGS Authentication OIDC Trust
+
+In `tags-authentication` service configuration:
+
+```yaml
+oidc:
+  providers:
+    - name: github-actions
+      issuer: https://token.actions.githubusercontent.com
+      audience: tags-authentication
+      trust_policy:
+        - claim: repository_owner
+          value: theangrygamershowproductions
+        - claim: repository
+          value: theangrygamershowproductions/tags-workflows
+      permissions:
+        - read_secret: ORG_RUNNER_APP_*
+```
+
+### 3. Verify OIDC Flow
+
+Test OIDC authentication from workflow:
+
+```bash
+gh workflow run runner-version-guard.yml --repo tags-workflows
+
+# Check logs for OIDC token exchange and secret fetch
+```
+
+**Security note**: OIDC tokens are short-lived (15 min default) and contain GitHub workflow context (repo, ref, actor). Trust policy validates these claims before granting access.
+
+**Implementation status**: This option requires additional TAGS infrastructure deployment. Document here for future reference.
+
+---
+
 ## Verification
 
 After configuring secrets (GitHub App or PAT):
@@ -436,14 +589,25 @@ After configuring secrets (GitHub App or PAT):
 - Runner host must have TAGS MCP stack access
 - Failure mode: Audit doesn't run when self-hosted fleet is down (expected)
 - Audit trail: Bitwarden access logs + GitHub workflow logs
+- **Bootstrap**: TAGS MCP stack on runner host (no GitHub credential)
 
-**Option B (Backup-Capable)**:
-- One GitHub secret: `BW_ACCESS_TOKEN` (bootstrap)
+**Option B (Backup-Capable with Bitwarden Bootstrap)**:
+- One GitHub org secret: `BW_ACCESS_TOKEN` (Bitwarden bootstrap only)
+- Org secret restricted to selected repos: `--repos tags-workflows,tags-mcp-servers`
 - All sensitive credentials (App ID, Installation ID, Private Key) remain in Bitwarden
 - Failure mode: Audit runs on GitHub-hosted when self-hosted unavailable (backup)
 - Audit trail: GitHub secret access + Bitwarden API logs + workflow logs
+- **Bootstrap**: Bitwarden access token stored as GitHub org secret
 
-**GitHub App model** (both options):
+**Option C (OIDC Trust Bridge)**:
+- Zero static secrets in GitHub (OIDC tokens are short-lived, 15 min)
+- Requires TAGS `tags-authentication` service exposed with OIDC endpoint
+- Trust policy validates GitHub workflow context (repo, ref, actor)
+- Failure mode: Depends on TAGS auth service availability
+- Audit trail: OIDC token claims + TAGS auth logs + Bitwarden API logs + workflow logs
+- **Bootstrap**: GitHub OIDC identity + TAGS trust policy (no static secret)
+
+**GitHub App model** (all options):
 - Read-only access to runner list
 - Installation tokens auto-expire (1h), no long-lived credentials in workflow
 - Scoped to org, no user dependency
@@ -492,8 +656,28 @@ After configuring secrets (GitHub App or PAT):
 - Reinstall app on org: App settings → Install App → Select org
 - Update `ORG_RUNNER_APP_INSTALLATION_ID` secret with correct ID from installation URL
 
+---
+
+## Decision Summary
+
+**Choose your execution model explicitly** (don't let it be implicit):
+
+| Option | GitHub Secrets | Supports GitHub-Hosted? | Additional Infra? | Recommended For |
+|--------|---------------|------------------------|------------------|----------------|
+| **A: Self-Hosted-Only** | Zero | ❌ No | TAGS MCP stack on runner hosts | Internal control plane; acceptable for audit to not run when fleet is down |
+| **B: Bitwarden Bootstrap** | 1 org secret (`BW_ACCESS_TOKEN`) | ✅ Yes | Bitwarden Secrets Manager | Audit continuity when fleet is down; centralized secret management |
+| **C: OIDC Bridge** | Zero | ✅ Yes | TAGS auth service exposed + OIDC trust | Advanced use case; zero static secrets; requires OIDC infrastructure |
+
+**TAGS recommendation**: Start with **Option A** (self-hosted-only, zero GitHub secrets). Upgrade to **Option B** if audit continuity during fleet outages becomes a requirement. Consider **Option C** for long-term architecture when OIDC trust infrastructure is deployed.
+
+**The physics constraint**: If you want GitHub-hosted runners to execute the workflow, **something** must bootstrap authentication (Bitwarden access token via GitHub secret, or OIDC identity via trust policy). Self-hosted-only is the only model that requires zero GitHub credentials.
+
+---
+
 ## References
 
 - [GitHub REST API: Self-hosted runners](https://docs.github.com/en/rest/actions/self-hosted-runners)
 - [GitHub Apps: Installation access tokens](https://docs.github.com/en/apps/creating-github-apps/authenticating-with-a-github-app/generating-an-installation-access-token-for-a-github-app)
 - [Using secrets in workflows](https://docs.github.com/en/actions/security-guides/encrypted-secrets)
+- [GitHub Actions OIDC](https://docs.github.com/en/actions/deployment/security-hardening-your-deployments/about-security-hardening-with-openid-connect)
+- [Bitwarden GitHub Actions integration](https://bitwarden.com/help/github-actions-integration/)
