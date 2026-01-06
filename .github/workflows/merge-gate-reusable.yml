@@ -1,0 +1,139 @@
+name: Merge Gate (Reusable)
+
+on:
+  workflow_call:
+    inputs:
+      pr_number:
+        description: 'Pull request number'
+        required: true
+        type: number
+      owner:
+        description: 'Repository owner'
+        required: false
+        type: string
+        default: ${{ github.repository_owner }}
+      repo:
+        description: 'Repository name'
+        required: false
+        type: string
+        default: ${{ github.event.repository.name }}
+      base_branch:
+        description: 'Base branch (default: main)'
+        required: false
+        type: string
+        default: 'main'
+      strict:
+        description: 'Strict mode for thread checking'
+        required: false
+        type: boolean
+        default: true
+      govern_ref:
+        description: 'TAGS-META checkout ref (for tgs-govern CLI)'
+        required: false
+        type: string
+        default: 'main'
+      mcp_ref:
+        description: 'tags-mcp-servers checkout ref (for MCP servers)'
+        required: false
+        type: string
+        default: 'main'
+
+jobs:
+  merge-gate:
+    name: Merge Gate Enforcement
+    runs-on: ubuntu-latest
+    
+    permissions:
+      contents: read
+      pull-requests: read
+      checks: read
+      statuses: read
+
+    steps:
+      - name: Checkout TAGS-META (tgs-govern CLI)
+        uses: actions/checkout@eef61447b9ff4aafe5dcd4e0bbf5d482be7e7871 # v6.0.1
+        with:
+          repository: theangrygamershowproductions/TAGS-META
+          ref: ${{ inputs.govern_ref }}
+          path: TAGS-META
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Checkout tags-mcp-servers (MCP engines)
+        uses: actions/checkout@eef61447b9ff4aafe5dcd4e0bbf5d482be7e7871 # v6.0.1
+        with:
+          repository: theangrygamershowproductions/tags-mcp-servers
+          ref: ${{ inputs.mcp_ref }}
+          path: tags-mcp-servers
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Python 3.12
+        uses: actions/setup-python@42375524e23c85be5e49493d7f8d6ad6d616ea0d # v6.0.0
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install MCP dependencies
+        run: |
+          cd tags-mcp-servers
+          pip install -e .
+
+      - name: Run tgs-govern ci-gate
+        id: gate
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PYTHONPATH: ${{ github.workspace }}/tags-mcp-servers
+        run: |
+          cd tags-mcp-servers
+          python3 ../TAGS-META/scripts/tgs-govern ci-gate \
+            --pr ${{ inputs.pr_number }} \
+            --owner "${{ inputs.owner }}" \
+            --repo "${{ inputs.repo }}" \
+            --base-branch "${{ inputs.base_branch }}" \
+            ${{ inputs.strict && '--strict' || '' }} \
+            --json-out gate-results.json \
+            --md-out gate-summary.md
+        continue-on-error: true
+
+      - name: Write summary to job
+        if: always()
+        run: |
+          if [ -f tags-mcp-servers/gate-summary.md ]; then
+            cat tags-mcp-servers/gate-summary.md >> $GITHUB_STEP_SUMMARY
+          else
+            echo "⚠️ Merge gate output not found" >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: Upload gate artifacts
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: merge-gate-results
+          path: |
+            tags-mcp-servers/gate-results.json
+            tags-mcp-servers/gate-summary.md
+          retention-days: 30
+
+      - name: Check gate status
+        if: always()
+        run: |
+          if [ -f tags-mcp-servers/gate-results.json ]; then
+            EXIT_CODE=$(jq -r '.exit_code' tags-mcp-servers/gate-results.json)
+            STATUS=$(jq -r '.overall_status' tags-mcp-servers/gate-results.json)
+            
+            echo "Gate Status: $STATUS"
+            echo "Exit Code: $EXIT_CODE"
+            
+            if [ "$EXIT_CODE" = "0" ]; then
+              echo "✅ Merge gate PASSED"
+              exit 0
+            elif [ "$EXIT_CODE" = "1" ]; then
+              echo "❌ Merge gate FAILED (policy violation)"
+              exit 1
+            else
+              echo "❌ Merge gate ERROR (infrastructure failure)"
+              exit 2
+            fi
+          else
+            echo "❌ Merge gate ERROR (results not found)"
+            exit 2
+          fi
