@@ -85,19 +85,29 @@ jobs:
           compliant = []
           offline = []
           online_count = 0
+          fleet_online_count = 0  # Only runners matching fleet selector
+          
+          # Fleet selector: only count runners intended for TAGS workloads
+          FLEET_LABELS = {"host-tagsdev"}  # Expand as fleet grows
           
           for r in runners:
               name = r.get("name", "?")
               status = r.get("status", "?")
               os_ = r.get("os", "?")
               labels = [lbl.get("name", "") for lbl in r.get("labels", [])]
+              label_set = set(labels)
+              
+              # Check if this runner is part of our fleet
+              is_fleet_runner = bool(FLEET_LABELS & label_set)
               
               # Check status first
               if status != "online":
-                  offline.append((name, status, os_, "runner offline"))
+                  offline.append((name, status, os_, "runner offline", is_fleet_runner))
                   continue
               
               online_count += 1
+              if is_fleet_runner:
+                  fleet_online_count += 1
               
               # Find runner-vX.Y.Z label
               version_label = None
@@ -129,6 +139,7 @@ jobs:
           
           print(f"Total runners: {len(runners)}")
           print(f"Online: {online_count} / {len(runners)}")
+          print(f"Fleet online (host-tagsdev): {fleet_online_count}")
           print(f"✅ Compliant (≥{'.'.join(map(str, RECOMMENDED))}): {len(compliant)}")
           print(f"⚠️  Warning (≥{'.'.join(map(str, MIN))}, <{'.'.join(map(str, RECOMMENDED))}): {len(warning)}")
           print(f"⚠️  Offline: {len(offline)}")
@@ -136,14 +147,16 @@ jobs:
           print(f"❌ Blocking (<{'.'.join(map(str, MIN))}): {len(blocking)}")
           print()
           
-          # CRITICAL: Zero online runners = no capacity (BLOCKING)
-          if online_count == 0:
-              print("❌ BLOCKING: Zero online runners available")
-              print("   No capacity for self-hosted workflow execution")
+          # CRITICAL: Zero fleet runners = no capacity for TAGS workloads (BLOCKING)
+          if fleet_online_count == 0:
+              print("❌ BLOCKING: Zero fleet runners online (host-tagsdev)")
+              print("   No capacity for TAGS self-hosted workflow execution")
+              print(f"   Total online runners: {online_count} (may be unrelated/experimental)")
               if offline:
                   print("   Offline runners:")
                   for o in offline:
-                      print(f"     - {o[0]}: {o[1]} ({o[2]})")
+                      fleet_marker = "🎯 FLEET" if o[4] else "⚪ Other"
+                      print(f"     - {o[0]}: {o[1]} ({o[2]}) [{fleet_marker}]")
               print()
               sys.exit(1)
           

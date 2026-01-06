@@ -19,6 +19,8 @@ The default `GITHUB_TOKEN` provided to workflows **does NOT** have this permissi
 
 **Least privilege, auditable, no user dependency**
 
+**CRITICAL**: Installation tokens expire in 1 hour. You MUST mint tokens at runtime in the workflow, not store a static token as a secret.
+
 1. **Create GitHub App**:
    - Settings → Developer settings → GitHub Apps → New GitHub App
    - Name: `TAGS Runner Audit`
@@ -26,27 +28,34 @@ The default `GITHUB_TOKEN` provided to workflows **does NOT** have this permissi
      - Self-hosted runners: **Read-only** ✅
    - Where can this GitHub App be installed? **Only on this account**
    - Install on: `theangrygamershowproductions`
+   - Generate private key → Download `.pem` file
 
-2. **Generate Installation Token**:
-   ```bash
-   # Get app installation ID
-   gh api /orgs/theangrygamershowproductions/installation
-   
-   # Generate token (expires in 1 hour, auto-refresh in workflow)
-   gh api --method POST \
-     -H "Accept: application/vnd.github+json" \
-     /app/installations/{installation_id}/access_tokens
-   ```
-
-3. **Add Secret to Organization**:
+2. **Store App Credentials as Secrets** (NOT installation token):
    - Settings → Secrets and variables → Actions → New organization secret
-   - Name: `ORG_RUNNER_READ_TOKEN`
-   - Value: Installation token from step 2
+   - `GH_APP_ID`: Your app ID (visible in app settings)
+   - `GH_APP_PRIVATE_KEY`: Contents of downloaded `.pem` file
    - Repository access: **Public repositories** (tags-workflows is public)
+
+3. **Mint Token in Workflow** (required for every run):
+   ```yaml
+   - name: Generate GitHub App token
+     id: app-token
+     uses: actions/create-github-app-token@31c86eb3b33c9b601a1f60f98dcbfd1d70f379b4  # v1.10.3 (SHA-pinned per Path A)
+     with:
+       app-id: ${{ secrets.GH_APP_ID }}
+       private-key: ${{ secrets.GH_APP_PRIVATE_KEY }}
+       owner: theangrygamershowproductions
+   
+   - name: Fetch org runners
+     env:
+       GH_TOKEN: ${{ steps.app-token.outputs.token }}  # Use minted token
+     run: |
+       # gh api calls here
+   ```
 
 ### Option 2: Personal Access Token (Classic)
 
-**Simpler but tied to user account**
+**Simpler setup, but tied to user account and broader permissions**
 
 1. **Create Classic PAT**:
    - Settings → Developer settings → Personal access tokens → Tokens (classic) → Generate new token
@@ -54,13 +63,22 @@ The default `GITHUB_TOKEN` provided to workflows **does NOT** have this permissi
    - Expiration: **No expiration** (or 1 year with calendar reminder)
    - Scopes:
      - `admin:org` → `read:org` ✅
-     - `repo` (if private repos need to use workflow)
+     - `repo` (only if private repos need to use this workflow)
 
-2. **Add Secret to Organization**:
-   - Settings → Secrets and variables → Actions → New organization secret
+2. **Add Secret to Organization or Repository**:
+   - Settings → Secrets and variables → Actions → New secret
    - Name: `ORG_RUNNER_READ_TOKEN`
    - Value: PAT from step 1
-   - Repository access: **Public repositories**
+   - If org secret: Repository access → **Public repositories**
+
+3. **Use Directly in Workflow** (no token minting required):
+   ```yaml
+   - name: Fetch org runners
+     env:
+       GH_TOKEN: ${{ secrets.ORG_RUNNER_READ_TOKEN }}  # Static PAT
+     run: |
+       # gh api calls here
+   ```
 
 ### Option 3: Fine-Grained PAT (Future-Ready)
 
