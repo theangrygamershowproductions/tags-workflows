@@ -1,0 +1,234 @@
+# Runner Version Guard - Label-Based Enforcement
+#
+# CRITICAL: GitHub org runner API does NOT return runner binary version.
+# This workflow enforces via custom labels (runner-vX.Y.Z) on each runner.
+# Runners without version labels are BLOCKED (unknown != pass).
+#
+# Host-side companion: ~/TAGS/shared/scripts/refresh_runner_labels.sh
+# (deployed via cron on each runner host to update labels daily)
+
+name: Runner Version Guard
+
+on:
+  schedule:
+    # Run daily at 6 AM UTC (1 AM EST, 10 PM PST)
+    - cron: '0 6 * * *'
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/runner-version-guard.yml'
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  audit-runners:
+    name: Audit Self-Hosted Runner Labels
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Fetch org runners
+        id: runners
+        env:
+          # CRITICAL: Org runners API requires admin:org scope
+          # GITHUB_TOKEN doesn't have this - use GitHub App or PAT with org admin
+          GH_TOKEN: ${{ secrets.ORG_RUNNER_READ_TOKEN }}
+        run: |
+          # Paginate if org has >100 runners
+          PAGE=1
+          ALL_RUNNERS="[]"
+          while true; do
+            RESP=$(gh api -H "Accept: application/vnd.github+json" \
+              "orgs/theangrygamershowproductions/actions/runners?per_page=100&page=$PAGE")
+            
+            RUNNERS=$(echo "$RESP" | jq -r '.runners')
+            if [ "$RUNNERS" = "[]" ]; then
+              break
+            fi
+            
+            ALL_RUNNERS=$(echo "$ALL_RUNNERS" "$RUNNERS" | jq -s 'add')
+            PAGE=$((PAGE + 1))
+          done
+          
+          echo "$ALL_RUNNERS" | jq -r '{runners: .}' > /tmp/org-runners.json
+          echo "Fetched $(echo "$ALL_RUNNERS" | jq -r 'length') runners"
+      
+      - name: Enforce label-based versions
+        id: enforce
+        run: |
+          python3 - <<'PY'
+          import json
+          import sys
+          import re
+          
+          MIN = (2, 327, 1)
+          RECOMMENDED = (2, 328, 0)
+          
+          def parse_version(v):
+              """Parse runner-vX.Y.Z label into tuple."""
+              try:
+                  return tuple(int(x) for x in v.split("."))
+              except Exception:
+                  return None
+          
+          data = json.load(open("/tmp/org-runners.json"))
+          runners = data.get("runners", [])
+          
+          if not runners:
+              print("⚠️  WARNING: No self-hosted runners found in org")
+              sys.exit(0)
+          
+          missing_labels = []
+          blocking = []
+          warning = []
+          compliant = []
+          offline = []
+          online_count = 0
+          fleet_online_count = 0  # Only runners matching fleet selector
+          
+          # Fleet selector: only count runners intended for TAGS workloads
+          FLEET_LABELS = {"host-tagsdev"}  # Expand as fleet grows
+          
+          for r in runners:
+              name = r.get("name", "?")
+              status = r.get("status", "?")
+              os_ = r.get("os", "?")
+              labels = [lbl.get("name", "") for lbl in r.get("labels", [])]
+              label_set = set(labels)
+              
+              # Check if this runner is part of our fleet
+              is_fleet_runner = bool(FLEET_LABELS & label_set)
+              
+              # Check status first
+              if status != "online":
+                  offline.append((name, status, os_, "runner offline", is_fleet_runner))
+                  continue
+              
+              online_count += 1
+              if is_fleet_runner:
+                  fleet_online_count += 1
+              
+              # Find runner-vX.Y.Z label
+              version_label = None
+              for lbl in labels:
+                  if lbl.startswith("runner-v"):
+                      version_label = lbl.replace("runner-v", "")
+                      break
+              
+              if not version_label:
+                  # BLOCKING: missing version label
+                  missing_labels.append((name, status, os_, labels))
+                  continue
+              
+              ver_tuple = parse_version(version_label)
+              if not ver_tuple:
+                  # BLOCKING: unparseable version label
+                  missing_labels.append((name, status, os_, labels))
+                  continue
+              
+              # Check Node24 label presence
+              has_node24 = "node24-present" in labels
+              
+              if ver_tuple < MIN:
+                  blocking.append((name, version_label, status, os_, has_node24, "below minimum"))
+              elif ver_tuple < RECOMMENDED:
+                  warning.append((name, version_label, status, os_, has_node24, "below recommended"))
+              else:
+                  compliant.append((name, version_label, status, os_, has_node24))
+          
+          print(f"Total runners: {len(runners)}")
+          print(f"Online: {online_count} / {len(runners)}")
+          print(f"Fleet online (host-tagsdev): {fleet_online_count}")
+          print(f"✅ Compliant (≥{'.'.join(map(str, RECOMMENDED))}): {len(compliant)}")
+          print(f"⚠️  Warning (≥{'.'.join(map(str, MIN))}, <{'.'.join(map(str, RECOMMENDED))}): {len(warning)}")
+          print(f"⚠️  Offline: {len(offline)}")
+          print(f"❌ Missing labels: {len(missing_labels)}")
+          print(f"❌ Blocking (<{'.'.join(map(str, MIN))}): {len(blocking)}")
+          print()
+          
+          # CRITICAL: Zero fleet runners = no capacity for TAGS workloads (BLOCKING)
+          if fleet_online_count == 0:
+              print("❌ BLOCKING: Zero fleet runners online (host-tagsdev)")
+              print("   No capacity for TAGS self-hosted workflow execution")
+              print(f"   Total online runners: {online_count} (may be unrelated/experimental)")
+              if offline:
+                  print("   Offline runners:")
+                  for o in offline:
+                      fleet_marker = "🎯 FLEET" if o[4] else "⚪ Other"
+                      print(f"     - {o[0]}: {o[1]} ({o[2]}) [{fleet_marker}]")
+              print()
+              sys.exit(1)
+          
+          # Missing labels = BLOCKING (unknown != pass)
+          if missing_labels:
+              print("❌ BLOCKING: The following runners lack runner-vX.Y.Z labels:")
+              print("   Label-based enforcement requires all online runners to report versions")
+              for m in missing_labels:
+                  print(f"     - {m[0]} ({m[1]}, {m[2]})")
+                  print(f"       Labels: {', '.join(m[3]) if m[3] else 'none'}")
+              print()
+              print("   ACTION REQUIRED:")
+              print("   1. Deploy ~/TAGS/shared/scripts/refresh_runner_labels.sh to runner host")
+              print("   2. Run script manually to populate labels")
+              print("   3. Configure cron: 0 7 * * * ~/TAGS/shared/scripts/refresh_runner_labels.sh")
+              print("   4. Verify labels appear in GitHub UI (Settings → Actions → Runners)")
+              print()
+              sys.exit(1)
+          
+          # Version below minimum = BLOCKING
+          if blocking:
+              print("❌ BLOCKING: The following runners are below minimum v2.327.1:")
+              print("   These runners CANNOT run v6 actions (Node 24 baseline)")
+              for b in blocking:
+                  node24_status = "✅ Node24" if b[4] else "❌ Node24 missing"
+                  print(f"     - {b[0]}: v{b[1]} ({b[2]}, {b[3]}) - {node24_status}")
+              print()
+              print("   ACTION REQUIRED:")
+              print("   1. Stop affected runner services")
+              print("   2. Update to latest runner (v2.328.0+)")
+              print("   3. Verify Node 24 runtime: ./externals/node24/bin/node --version")
+              print("   4. Restart runner services")
+              print("   5. Labels will auto-refresh within 24h (or run refresh script manually)")
+              print()
+              sys.exit(1)
+          
+          # Warnings (non-blocking, but should upgrade)
+          if warning:
+              print("⚠️  WARNING: The following runners should be updated:")
+              for w in warning:
+                  node24_status = "✅ Node24" if w[4] else "❌ Node24 missing"
+                  print(f"     - {w[0]}: v{w[1]} ({w[2]}, {w[3]}) - {node24_status}")
+              print()
+              print("   RECOMMENDED: Update to v2.328.0+ for best compatibility")
+              print()
+          
+          # Offline runners (non-blocking, informational)
+          if offline:
+              print("⚠️  OFFLINE: The following runners are not online:")
+              for o in offline:
+                  print(f"     - {o[0]}: {o[1]} ({o[2]})")
+              print()
+          
+          # Compliant runners
+          if compliant:
+              print("✅ Compliant runners:")
+              for c in compliant:
+                  node24_status = "✅ Node24" if c[4] else "⚠️ Node24 label missing"
+                  print(f"     - {c[0]}: v{c[1]} ({c[2]}, {c[3]}) - {node24_status}")
+          
+          PY
+      
+      - name: Summary
+        if: always()
+        run: |
+          echo "## Runner Version Guard (Label-Based)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Enforcement**: Custom label \`runner-vX.Y.Z\` on each runner" >> $GITHUB_STEP_SUMMARY
+          echo "**Minimum**: v2.327.1 (Node 24 baseline)" >> $GITHUB_STEP_SUMMARY
+          echo "**Recommended**: v2.328.0+" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**NOTE**: GitHub org runner API does not return binary version." >> $GITHUB_STEP_SUMMARY
+          echo "Host-side script \`refresh_runner_labels.sh\` maintains labels." >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "See job log for details." >> $GITHUB_STEP_SUMMARY
