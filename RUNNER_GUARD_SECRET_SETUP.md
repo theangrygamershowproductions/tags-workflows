@@ -2,6 +2,27 @@
 
 **Status**: Required for `runner-version-guard.yml` workflow to function
 
+---
+
+## ⚠️ GitHub Free Plan Limitation
+
+**CRITICAL CONSTRAINT**: Organization-level Actions secrets **cannot be used by private repositories** on GitHub Free plan. ([Docs](https://docs.github.com/actions/security-guides/using-secrets-in-github-actions#creating-secrets-for-an-organization))
+
+**What this means**:
+- If `tags-workflows` or other repos needing secrets are **private**, you MUST use **repo-level secrets** (not org-level)
+- Org-level secrets are only accessible to **public repositories** on free plan
+- To use org-level secrets with private repos, you must **upgrade to GitHub Team or Enterprise**
+
+**Product separation**: GitHub secrets are scoped by product:
+- **Actions** secrets: Used by GitHub Actions workflows (this doc)
+- **Codespaces** secrets: Used inside Codespaces environments (separate)
+- **Dependabot** secrets: Used by Dependabot updates (separate)
+- **Private registries**: Security tooling registry access (separate)
+
+These scopes do NOT cross over. Actions secrets are NOT available to Codespaces/Dependabot.
+
+---
+
 ## Architectural Decision: Where Does Runner Guard Run?
 
 **CRITICAL**: The secret storage approach depends on your execution model.
@@ -18,6 +39,7 @@
 **Tradeoffs**:
 - ✅ Zero GitHub secrets (entire auth stack in Bitwarden)
 - ✅ Consistent with "internal control plane" philosophy
+- ✅ **Unaffected by GitHub Free plan limitation** (no GitHub secrets used)
 - ❌ When self-hosted fleet is down, audit can't run (no enforcement)
 - ❌ Fails closed if fleet unavailable (expected behavior)
 
@@ -38,6 +60,7 @@
 - ✅ Audit continues even when self-hosted fleet is down
 - ✅ Secrets centralized in Bitwarden (GitHub only has bootstrap token)
 - ❌ One GitHub secret required (`BW_ACCESS_TOKEN`)
+- ⚠️ **GitHub Free constraint**: If repo is private, must use **repo-level secret** (not org-level)
 - ❌ Requires Bitwarden Secrets Manager API access from GitHub-hosted runners
 
 **Implementation**: See [Option B Configuration](#option-b-backup-capable-bitwarden-bootstrap)
@@ -95,22 +118,37 @@ The default `GITHUB_TOKEN` provided to workflows **does NOT** have this permissi
 
 **If using Option B (backup-capable) with Bitwarden bootstrap**:
 
-Store `BW_ACCESS_TOKEN` as an **organization-level secret** restricted to selected repos:
+**GitHub Free plan**: Org-level secrets work for **public repos only**. For private repos, use repo-level secrets:
 
 ```bash
-# Create org secret restricted to specific repos
+# PUBLIC repos: Org-level secret (centralized, preferred if available)
 gh secret set BW_ACCESS_TOKEN \
   --org theangrygamershowproductions \
   --repos tags-workflows,tags-mcp-servers \
   --body "<BWS_ACCESS_TOKEN_VALUE>"
+
+# PRIVATE repos on free plan: Repo-level secret (required workaround)
+gh secret set BW_ACCESS_TOKEN \
+  --repo theangrygamershowproductions/tags-workflows \
+  --body "<BWS_ACCESS_TOKEN_VALUE>"
+
+# Repeat for each private repo that needs the secret
+gh secret set BW_ACCESS_TOKEN \
+  --repo theangrygamershowproductions/tags-mcp-servers \
+  --body "<BWS_ACCESS_TOKEN_VALUE>"
 ```
 
-**Why org-level with repo restrictions** ([Docs](https://docs.github.com/en/actions/security-guides/using-secrets-in-github-actions#creating-secrets-for-an-organization)):
+**Why org-level with repo restrictions** (public repos or paid plan) ([Docs](https://docs.github.com/en/actions/security-guides/using-secrets-in-github-actions#creating-secrets-for-an-organization)):
 - Centralized management (one secret, not per-repo duplication)
 - Least privilege (restrict access to only repos that need it)
 - Audit trail (org-level secret access logs)
 
-**Alternative**: Repo-level secrets for stricter isolation, but requires per-repo secret management.
+**Why repo-level** (private repos on free plan):
+- GitHub Free limitation: Org-level secrets cannot be used by private repos
+- Per-repo secret management (manual duplication required)
+- Same audit trail, but per-repo instead of org-level
+
+**Alternative for private repos**: Upgrade to GitHub Team ($4/user/month) or Enterprise to enable org-level secrets for private repos. ([Pricing](https://github.com/pricing))
 
 ---
 
@@ -391,11 +429,37 @@ Expected: Workflow queues but never starts (no matching runner).
 
 ### 2. Store Bootstrap Token in GitHub
 
+**If tags-workflows is PUBLIC** or you have GitHub Team/Enterprise:
+
 Navigate: `https://github.com/organizations/theangrygamershowproductions/settings/secrets/actions/new`
 
 - **Name**: `BW_ACCESS_TOKEN`
 - **Value**: Bitwarden access token from step 1
-- **Repository access**: Public repositories (or specific repos)
+- **Repository access**: Select `tags-workflows` (and any other repos that need it)
+
+```bash
+# Org-level secret (public repos or paid plan)
+gh secret set BW_ACCESS_TOKEN \
+  --org theangrygamershowproductions \
+  --repos tags-workflows \
+  --body "0.YOUR_BWS_TOKEN_HERE"
+```
+
+**If tags-workflows is PRIVATE and you have GitHub Free**:
+
+Navigate: `https://github.com/theangrygamershowproductions/tags-workflows/settings/secrets/actions/new`
+
+- **Name**: `BW_ACCESS_TOKEN`
+- **Value**: Bitwarden access token from step 1
+
+```bash
+# Repo-level secret (required for private repos on free plan)
+gh secret set BW_ACCESS_TOKEN \
+  --repo theangrygamershowproductions/tags-workflows \
+  --body "0.YOUR_BWS_TOKEN_HERE"
+```
+
+**Note**: If you need this secret in multiple private repos on free plan, you must add it to each repo individually (no centralized org-level option).
 
 ### 3. Configure Workflow for Backup Execution
 
@@ -662,13 +726,21 @@ After configuring secrets (GitHub App or PAT):
 
 **Choose your execution model explicitly** (don't let it be implicit):
 
-| Option | GitHub Secrets | Supports GitHub-Hosted? | Additional Infra? | Recommended For |
-|--------|---------------|------------------------|------------------|----------------|
-| **A: Self-Hosted-Only** | Zero | ❌ No | TAGS MCP stack on runner hosts | Internal control plane; acceptable for audit to not run when fleet is down |
-| **B: Bitwarden Bootstrap** | 1 org secret (`BW_ACCESS_TOKEN`) | ✅ Yes | Bitwarden Secrets Manager | Audit continuity when fleet is down; centralized secret management |
-| **C: OIDC Bridge** | Zero | ✅ Yes | TAGS auth service exposed + OIDC trust | Advanced use case; zero static secrets; requires OIDC infrastructure |
+| Option | GitHub Secrets | Supports GitHub-Hosted? | Additional Infra? | GitHub Free Constraint | Recommended For |
+|--------|---------------|------------------------|------------------|----------------------|----------------|
+| **A: Self-Hosted-Only** | Zero | ❌ No | TAGS MCP stack on runner hosts | ✅ Unaffected | Internal control plane; acceptable for audit to not run when fleet is down |
+| **B: Bitwarden Bootstrap** | 1 secret (`BW_ACCESS_TOKEN`) | ✅ Yes | Bitwarden Secrets Manager | ⚠️ **Repo-level only** for private repos | Audit continuity when fleet is down; requires per-repo secret on free plan |
+| **C: OIDC Bridge** | Zero | ✅ Yes | TAGS auth service exposed + OIDC trust | ✅ Unaffected | Advanced use case; zero static secrets; requires OIDC infrastructure |
 
-**TAGS recommendation**: Start with **Option A** (self-hosted-only, zero GitHub secrets). Upgrade to **Option B** if audit continuity during fleet outages becomes a requirement. Consider **Option C** for long-term architecture when OIDC trust infrastructure is deployed.
+**GitHub Free plan limitation**: If repo is **private**, org-level Actions secrets cannot be used. Options:
+- Use **repo-level secrets** (Option B: manual duplication per repo)
+- Use **Option A or C** (no GitHub secrets required)
+- Upgrade to **GitHub Team** ($4/user/month) to enable org-level secrets for private repos
+
+**TAGS recommendation**: 
+1. **Start with Option A** (self-hosted-only, zero GitHub secrets) - unaffected by plan constraints
+2. **Upgrade to Option B** if audit continuity during fleet outages required - accepts repo-level secret duplication on free plan
+3. **Consider Option C** for long-term architecture when OIDC trust infrastructure is deployed - zero static secrets
 
 **The physics constraint**: If you want GitHub-hosted runners to execute the workflow, **something** must bootstrap authentication (Bitwarden access token via GitHub secret, or OIDC identity via trust policy). Self-hosted-only is the only model that requires zero GitHub credentials.
 
