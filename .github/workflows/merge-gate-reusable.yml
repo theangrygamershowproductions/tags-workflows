@@ -28,7 +28,7 @@ on:
         type: boolean
         default: true
       govern_ref:
-        description: 'TAGS-META checkout ref (for tgs-govern CLI)'
+        description: 'TAGS-META checkout ref (for tags-govern CLI)'
         required: false
         type: string
         default: 'main'
@@ -50,7 +50,7 @@ jobs:
       statuses: read
 
     steps:
-      - name: Checkout TAGS-META (tgs-govern CLI)
+      - name: Checkout TAGS-META (tags-govern CLI)
         uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1 (Dec 02, 2025)
         with:
           repository: theangrygamershowproductions/TAGS-META
