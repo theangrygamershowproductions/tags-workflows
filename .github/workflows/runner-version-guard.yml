@@ -31,7 +31,9 @@ jobs:
       - name: Fetch org runners
         id: runners
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # CRITICAL: Org runners API requires admin:org scope
+          # GITHUB_TOKEN doesn't have this - use GitHub App or PAT with org admin
+          GH_TOKEN: ${{ secrets.ORG_RUNNER_READ_TOKEN }}
         run: |
           # Paginate if org has >100 runners
           PAGE=1
@@ -82,6 +84,7 @@ jobs:
           warning = []
           compliant = []
           offline = []
+          online_count = 0
           
           for r in runners:
               name = r.get("name", "?")
@@ -93,6 +96,8 @@ jobs:
               if status != "online":
                   offline.append((name, status, os_, "runner offline"))
                   continue
+              
+              online_count += 1
               
               # Find runner-vX.Y.Z label
               version_label = None
@@ -123,12 +128,24 @@ jobs:
                   compliant.append((name, version_label, status, os_, has_node24))
           
           print(f"Total runners: {len(runners)}")
+          print(f"Online: {online_count} / {len(runners)}")
           print(f"✅ Compliant (≥{'.'.join(map(str, RECOMMENDED))}): {len(compliant)}")
           print(f"⚠️  Warning (≥{'.'.join(map(str, MIN))}, <{'.'.join(map(str, RECOMMENDED))}): {len(warning)}")
           print(f"⚠️  Offline: {len(offline)}")
           print(f"❌ Missing labels: {len(missing_labels)}")
           print(f"❌ Blocking (<{'.'.join(map(str, MIN))}): {len(blocking)}")
           print()
+          
+          # CRITICAL: Zero online runners = no capacity (BLOCKING)
+          if online_count == 0:
+              print("❌ BLOCKING: Zero online runners available")
+              print("   No capacity for self-hosted workflow execution")
+              if offline:
+                  print("   Offline runners:")
+                  for o in offline:
+                      print(f"     - {o[0]}: {o[1]} ({o[2]})")
+              print()
+              sys.exit(1)
           
           # Missing labels = BLOCKING (unknown != pass)
           if missing_labels:
