@@ -292,7 +292,7 @@ If you want `refresh_runner_labels.sh` to authenticate via GitHub App instead of
    - Note: `TAGS Runner Audit (Emergency)`
    - Expiration: **1 year** (set calendar reminder for rotation)
    - Required scopes:
-     - `admin:org` → `read:org` ✅ (org runner list access)
+     - `admin:org` ✅ (full org administration - required for runner API)
      - `repo` (only if private repos need this workflow)
 
 2. **Add Secret to Organization**:
@@ -706,10 +706,10 @@ After configuring secrets (GitHub App or PAT):
 
 ### "Not Found" (HTTP 404)
 
-**Cause**: Token doesn't have `read:org` permission, or org name is wrong.
+**Cause**: Token doesn't have `admin:org` permission, or org name is wrong.
 
 **Fix**: 
-- Verify token has correct scope (admin:org → read:org for PAT, Self-hosted runners: Read for App)
+- Verify token has correct scope (full `admin:org` for PAT, "Self-hosted runners: Read" for App)
 - Confirm org name in workflow matches `theangrygamershowproductions`
 
 ### "App installation not found"
