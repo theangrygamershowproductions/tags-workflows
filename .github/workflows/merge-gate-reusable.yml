@@ -41,7 +41,10 @@ on:
 jobs:
   merge-gate:
     name: Merge Gate Enforcement
-    runs-on: ubuntu-latest
+    # ENFORCEMENT WORKFLOW: Self-hosted only, fail closed
+    # Rationale: Fleet down = required check won't pass = merges blocked
+    # No GitHub-hosted backup (governance control plane stays internal)
+    runs-on: [self-hosted, host-tagsdev]
     
     permissions:
       contents: read
