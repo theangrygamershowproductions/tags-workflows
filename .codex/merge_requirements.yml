@@ -1,0 +1,30 @@
+# Merge requirements for tags-workflows (GitHub Free fallback)
+# Location: ~/TAGS/ecosystem/tags-workflows/.codex/merge_requirements.yml
+#
+# Purpose: Define merge prerequisites when branch protection API unavailable
+#          (GitHub Free + private repos → no platform enforcement)
+#
+# Usage: pr_merge_guard.sh reads this file when GitHub API returns 403
+
+# Required status checks (must all pass)
+required_checks:
+  - "Audit Self-Hosted Runner Labels"  # runner-version-guard workflow
+  # Add more as enforcement workflows are added
+
+# Required number of approving reviews
+# 0 = single-maintainer exception (no external reviewers available)
+required_reviews: 0
+
+# Must all review conversations be resolved?
+conversation_resolution_required: true
+
+# Allowed merge methods
+allowed_merge_methods:
+  - squash
+  - merge  # rebase not recommended (loses PR association)
+
+# Notes:
+# - This file is source of truth for tags-workflows merge requirements
+# - Branch protection API fails with HTTP 403 (GitHub Free limitation)
+# - Wrapper scripts enforce these requirements locally
+# - When upgrading to paid plan, migrate to platform branch protection
