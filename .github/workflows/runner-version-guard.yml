@@ -35,6 +35,7 @@ jobs:
   audit-runners:
     name: Audit Self-Hosted Runner Labels
     runs-on: ubuntu-latest
+    if: ${{ github.ref == 'refs/heads/main' }}  # Belt-and-suspenders: main-only execution
     
     steps:
       - name: Assert execution-safety boundaries
@@ -70,6 +71,7 @@ jobs:
         env:
           # CRITICAL: Org runners API requires admin:org scope
           # GITHUB_TOKEN doesn't have this - use GitHub App or PAT with org admin
+          # Scoped to step-level (not job-level) to minimize exposure surface
           GH_TOKEN: ${{ secrets.ORG_RUNNER_READ_TOKEN }}
         run: |
           # Paginate if org has >100 runners
