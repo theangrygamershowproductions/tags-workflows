@@ -6,6 +6,14 @@
 #
 # Host-side companion: ~/TAGS/shared/scripts/refresh_runner_labels.sh
 # (deployed via cron on each runner host to update labels daily)
+#
+# SECURITY BOUNDARY: Uses ORG_RUNNER_READ_TOKEN (admin:org scope).
+# This workflow is execution-safe ONLY because:
+# - No PR triggers (schedule/workflow_dispatch/main-push only)
+# - No code checkout (inline logic only)
+# - GitHub-hosted runners only (token never exposed to self-hosted)
+# - Minimal permissions (actions:read, contents:read)
+# See: docs/security/ORG_RUNNER_READ_TOKEN_SECURITY.md
 
 name: Runner Version Guard
 
@@ -15,6 +23,7 @@ on:
     - cron: '0 6 * * *'
   workflow_dispatch:
   push:
+    branches: [main]  # Main-only: prevent branch-based token exposure
     paths:
       - '.github/workflows/runner-version-guard.yml'
 
@@ -28,6 +37,34 @@ jobs:
     runs-on: ubuntu-latest
     
     steps:
+      - name: Assert execution-safety boundaries
+        run: |
+          # SECURITY: Verify this workflow wasn't triggered by PR or self-hosted runner
+          EVENT="${{ github.event_name }}"
+          RUNNER="${{ runner.name }}"
+          
+          # Allowed events: schedule, workflow_dispatch, push (main-only via trigger config)
+          if [[ "$EVENT" != "schedule" && "$EVENT" != "workflow_dispatch" && "$EVENT" != "push" ]]; then
+            echo "❌ SECURITY VIOLATION: Workflow triggered by unauthorized event: $EVENT"
+            echo "   Allowed: schedule, workflow_dispatch, push (main-only)"
+            echo "   This workflow uses ORG_RUNNER_READ_TOKEN (admin:org scope)"
+            echo "   See: docs/security/ORG_RUNNER_READ_TOKEN_SECURITY.md"
+            exit 1
+          fi
+          
+          # GitHub-hosted runners have numeric IDs, self-hosted have custom names
+          # GitHub-hosted pattern: "GitHub Actions XX" or "Hosted Agent"
+          if [[ "$RUNNER" != *"GitHub Actions"* && "$RUNNER" != *"Hosted Agent"* ]]; then
+            echo "❌ SECURITY VIOLATION: Workflow running on non-GitHub-hosted runner: $RUNNER"
+            echo "   This workflow MUST run on GitHub-hosted runners only"
+            echo "   ORG_RUNNER_READ_TOKEN (admin:org) cannot be exposed to self-hosted"
+            exit 1
+          fi
+          
+          echo "✅ Execution-safety boundaries validated"
+          echo "   Event: $EVENT"
+          echo "   Runner: $RUNNER (GitHub-hosted)"
+      
       - name: Fetch org runners
         id: runners
         env:
