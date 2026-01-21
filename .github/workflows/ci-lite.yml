@@ -1,8 +1,23 @@
 name: CI Lite - Fast PR Validation
 
+# TWO-TIER RUNNER MODEL (see docs/TWO_TIER_RUNNER_POLICY.md):
+# - Private repos: Default to [self-hosted, tagsdev], secrets allowed
+# - Public repos (untrusted PRs): GitHub-hosted, read-only, no secrets
+# Callers select tier via `runner` and `trusted` inputs
+
 on:
    workflow_call:
       inputs:
+         runner:
+            description: "Runner label(s) - use 'ubuntu-latest' for public untrusted PRs, '[self-hosted, tagsdev]' for private repos"
+            required: false
+            type: string
+            default: "[self-hosted, tagsdev]"
+         trusted:
+            description: "Trusted context - set false for untrusted PR code (forks, external contributors). Gates secret-using steps."
+            required: false
+            type: boolean
+            default: true
          node_version:
             description: "Node.js version to use"
             required: false
@@ -30,7 +45,7 @@ on:
 jobs:
    validate:
       name: Fast PR Validation
-      runs-on: ubuntu-latest
+      runs-on: ${{ fromJSON(inputs.runner) }}
       permissions:
          contents: read
          pull-requests: write
@@ -38,17 +53,21 @@ jobs:
 
       steps:
          - name: Checkout repository
-           uses: actions/checkout@v4
+           uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0 (Aug 11, 2025)
            with:
               fetch-depth: 0
 
-         - name: Setup Python and Node.js environment
-           uses: theangrygamershowproductions/.github/actions/setup-python-node@v1
+         - name: Setup Python
+           if: ${{ !inputs.skip_python }}
+           uses: actions/setup-python@e797f83bcb11b83ae66e0230d6156d7c80228e7c # v6.0.0 (Sep 4, 2025)
            with:
-              node_version: ${{ inputs.node_version }}
-              python_version: ${{ inputs.python_version }}
-              skip_python: ${{ inputs.skip_python }}
-              skip_node: ${{ inputs.skip_node }}
+              python-version: ${{ inputs.python_version }}
+
+         - name: Setup Node.js
+           if: ${{ !inputs.skip_node }}
+           uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0 (Sep 4, 2025)
+           with:
+              node-version: ${{ inputs.node_version }}
 
          - name: Lint JavaScript/TypeScript
            if: ${{ !inputs.skip_node }}
