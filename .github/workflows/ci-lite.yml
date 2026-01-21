@@ -45,7 +45,8 @@ on:
 jobs:
    validate:
       name: Fast PR Validation
-      runs-on: ${{ fromJSON(inputs.runner) }}
+      # Handle both JSON array (["self-hosted","tagsdev"]) and plain string (ubuntu-latest)
+      runs-on: ${{ startsWith(inputs.runner, '[') && fromJSON(inputs.runner) || inputs.runner }}
       permissions:
          contents: read
          pull-requests: write
