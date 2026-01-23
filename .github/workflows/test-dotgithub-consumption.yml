@@ -1,0 +1,17 @@
+name: Test .github Workflow Consumption
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/test-dotgithub-consumption.yml'
+  workflow_dispatch:
+
+jobs:
+  # Verify we can consume reusable workflows from theangrygamershowproductions/.github
+  verify-consumption:
+    uses: theangrygamershowproductions/.github/.github/workflows/ci-lite.yml@main
+    with:
+      python_version: "3.12"
+      node_version: "20"
+      skip_python: true
+      skip_node: true
