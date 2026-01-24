@@ -1,0 +1,17 @@
+name: Test Self-Consumption
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/test-self-consumption.yml'
+  workflow_dispatch:
+
+jobs:
+  # Verify we can consume our own reusable workflows
+  verify-consumption:
+    uses: theangrygamershowproductions/tags-workflows/.github/workflows/ci-lite.yml@main
+    with:
+      python_version: "3.12"
+      node_version: "20"
+      skip_python: true
+      skip_node: true
