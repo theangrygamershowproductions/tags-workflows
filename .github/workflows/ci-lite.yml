@@ -1,18 +1,25 @@
 name: CI Lite - Fast PR Validation
 
-# TWO-TIER RUNNER MODEL (see docs/TWO_TIER_RUNNER_POLICY.md):
-# - Private repos: Default to [self-hosted, tagsdev], secrets allowed
-# - Public repos (untrusted PRs): GitHub-hosted, read-only, no secrets
-# Callers select tier via `runner` and `trusted` inputs
+# PUBLIC WORKFLOW - GitHub-hosted runners ONLY
+#
+# This is a PUBLIC reusable workflow. It must:
+# - Default to GitHub-hosted runners (ubuntu-latest)
+# - NOT reference internal infrastructure labels
+# - Work safely with untrusted fork PRs
+#
+# For private repos with self-hosted runners:
+#   Use: tags-workflows-private/ci-lite-private.yml
+#
+# See: docs/governance/TWO_TIER_RUNNER_POLICY.md
 
 on:
    workflow_call:
       inputs:
          runner:
-            description: "Runner label(s) - use 'ubuntu-latest' for public untrusted PRs, '[self-hosted, tagsdev]' for private repos"
+            description: "Runner label - use 'ubuntu-latest' (default) or other GitHub-hosted runners"
             required: false
             type: string
-            default: "[self-hosted, tagsdev]"
+            default: "ubuntu-latest"
          trusted:
             description: "Trusted context - set false for untrusted PR code (forks, external contributors). Gates secret-using steps."
             required: false

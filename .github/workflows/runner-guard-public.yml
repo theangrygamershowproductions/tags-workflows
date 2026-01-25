@@ -1,0 +1,83 @@
+# Runner Type Guard - PUBLIC Repo Enforcement
+#
+# PURPOSE: Ensure no self-hosted runner references leak into public workflows
+# ENFORCEMENT: Fail if ANY workflow contains self-hosted runner labels
+#
+# Why this matters:
+# - Self-hosted runner labels reveal internal infrastructure
+# - Public repos should ONLY use GitHub-hosted runners (ubuntu-latest, etc.)
+# - Private workflows live in tags-workflows-private
+#
+# Authority: TWO_TIER_RUNNER_POLICY.md
+
+name: Runner Guard (Public)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/**'
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/**'
+
+jobs:
+  check-runner-types:
+    name: Verify GitHub-hosted only
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Check for self-hosted references
+        run: |
+          echo "🔍 Scanning workflows for self-hosted runner references..."
+          
+          VIOLATIONS=""
+          
+          # Check all workflow files
+          for file in .github/workflows/*.yml .github/workflows/*.yaml; do
+            [ -f "$file" ] || continue
+            
+            # Skip this guard workflow itself (it mentions self-hosted in comments)
+            if [[ "$file" == *"runner-guard"* ]]; then
+              continue
+            fi
+            
+            # Check for self-hosted in runs-on (not just comments)
+            if grep -E "^\s*runs-on:.*self-hosted" "$file" 2>/dev/null; then
+              VIOLATIONS="${VIOLATIONS}\n❌ $file: Contains self-hosted runs-on"
+            fi
+            
+            # Check for internal runner labels in runs-on
+            if grep -E "^\s*runs-on:.*tagsdev|host-tagsdev" "$file" 2>/dev/null; then
+              VIOLATIONS="${VIOLATIONS}\n❌ $file: Contains internal runner label"
+            fi
+            
+            # Check for self-hosted as default input value
+            if grep -E "default:.*self-hosted" "$file" 2>/dev/null; then
+              VIOLATIONS="${VIOLATIONS}\n❌ $file: Has self-hosted as default"
+            fi
+          done
+          
+          if [ -n "$VIOLATIONS" ]; then
+            echo ""
+            echo "════════════════════════════════════════════════════════════"
+            echo "🚫 RUNNER TYPE VIOLATION DETECTED"
+            echo "════════════════════════════════════════════════════════════"
+            echo -e "$VIOLATIONS"
+            echo ""
+            echo "This is a PUBLIC workflow repository."
+            echo "Self-hosted workflows belong in: tags-workflows-private"
+            echo ""
+            echo "Allowed runners: ubuntu-latest, ubuntu-22.04, ubuntu-24.04,"
+            echo "                 macos-latest, windows-latest, etc."
+            echo ""
+            echo "Fix: Move self-hosted workflows to tags-workflows-private"
+            echo "     or change runs-on to GitHub-hosted runner."
+            exit 1
+          fi
+          
+          echo "✅ All workflows use GitHub-hosted runners only"
