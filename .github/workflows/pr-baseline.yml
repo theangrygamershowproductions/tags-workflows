@@ -25,8 +25,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if [[ -x ./scripts/check_core6_compliance.sh ]]; then
-            ./scripts/check_core6_compliance.sh
+          if [[ -f ./scripts/check_core6_compliance.sh ]]; then
+            bash ./scripts/check_core6_compliance.sh
           else
             echo "Skipping CORE-6 script check: ./scripts/check_core6_compliance.sh not present on this ref"
           fi
