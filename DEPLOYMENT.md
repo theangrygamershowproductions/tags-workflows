@@ -85,7 +85,8 @@ Confirm the consumer repository row in the root matrix has owner, wave, target r
 Expected output:
 
 ```text
-CORE-6 compliance check passes with no missing required documents.
+- All reported checks show PASS for each required CORE-6 document or file.
+- The script finishes with a final summary line reporting COMPLIANT.
 ```
 
 ### Step 2: Apply migration in target consumer repository
@@ -149,4 +150,4 @@ grep -R "pull_request\|pull_request_target\|workflow_call" .github/workflows | c
 - [TODO.md](TODO.md) - Deployment task breakdown
 - [ROADMAP.md](ROADMAP.md) - Target version timeline
 - [PROGRESS.md](PROGRESS.md) - Known deployment gaps
-- [TAGS Root DEPLOYMENT.md](../../DEPLOYMENT.md) - Root control-plane runbook
+- [TAGS Root DEPLOYMENT.md](https://github.com/theangrygamershowproductions/TAGS-META/blob/main/DEPLOYMENT.md) - Root control-plane runbook

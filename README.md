@@ -36,7 +36,7 @@ jobs:
 
 ## 📋 Versioning
 
-- **`@0123456789abcdef0123456789abcdef01234567`** - Immutable SHA pin (required)
+- **`@<immutable-sha>`** - Immutable SHA pin (required)
 
 ## 🤝 Contributing
 

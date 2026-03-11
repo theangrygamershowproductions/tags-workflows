@@ -78,6 +78,6 @@ TAGS repositories need one canonical **public/untrusted** CI source for shared p
 - [TODO.md](TODO.md) - Task execution tracking
 - [ROADMAP.md](ROADMAP.md) - Version timeline
 - [DEPLOYMENT.md](DEPLOYMENT.md) - Architecture decisions
-- [CORE-6 Standard](../../TAGS_KB/30_CORE6_STANDARD.md)
-- [TAGS Root PLAN.md](../../PLAN.md) - Authoritative ecosystem control plane
+- [CORE-6 Standard](https://github.com/theangrygamershowproductions/TAGS-META/blob/main/TAGS_KB/30_CORE6_STANDARD.md)
+- [TAGS Root PLAN.md](https://github.com/theangrygamershowproductions/TAGS-META/blob/main/PLAN.md) - Authoritative ecosystem control plane
 - Source-of-truth relationship: this repository is authoritative for shared CI execution patterns; TAGS root CORE-6 is authoritative for orchestration status and migration gates.

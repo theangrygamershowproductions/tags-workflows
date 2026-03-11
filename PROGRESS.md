@@ -31,7 +31,7 @@ This repository uses the CORE-6 standard:
 5. [DEPLOYMENT.md](DEPLOYMENT.md) - Architecture and procedures
 6. [CHANGELOG.md](CHANGELOG.md) - Versioned release history
 
-Reference: [TAGS_KB/30_CORE6_STANDARD.md](../../TAGS_KB/30_CORE6_STANDARD.md)
+Reference: [TAGS_KB/30_CORE6_STANDARD.md](https://github.com/theangrygamershowproductions/TAGS-META/blob/main/TAGS_KB/30_CORE6_STANDARD.md)
 
 ## Current Status Snapshot
 
