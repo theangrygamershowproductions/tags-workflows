@@ -1,0 +1,46 @@
+name: PR Baseline
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened, ready_for_review]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pr-baseline-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  pr-baseline:
+    name: pr-baseline
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: CORE-6 baseline compliance (if available)
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -f ./scripts/check_core6_compliance.sh ]]; then
+            bash ./scripts/check_core6_compliance.sh
+          else
+            echo "Skipping CORE-6 script check: ./scripts/check_core6_compliance.sh not present on this ref"
+          fi
+
+      - name: Shell syntax validation
+        shell: bash
+        run: |
+          set -euo pipefail
+          mapfile -t files < <(git ls-files '*.sh')
+          if [[ ${#files[@]} -eq 0 ]]; then
+            echo "No shell files tracked."
+            exit 0
+          fi
+          for f in "${files[@]}"; do
+            bash -n "$f"
+          done
+          echo "Validated ${#files[@]} shell files with bash -n."
