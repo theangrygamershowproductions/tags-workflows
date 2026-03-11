@@ -10,8 +10,8 @@
 # repository currently has no stable PR-attached status checks for non-workflow
 # changes. The previous requirement pointed at a main-only scheduled job and
 # could never satisfy ordinary PRs.
-local_enforcement: false
-fail_closed: false
+local_enforcement: "false"
+fail_closed: "false"
 
 # Required status checks (must all pass) when local enforcement is re-enabled.
 required_checks: []
