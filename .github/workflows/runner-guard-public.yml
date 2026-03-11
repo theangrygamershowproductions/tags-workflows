@@ -16,17 +16,17 @@ on:
   push:
     branches: [main]
     paths:
-      - '.github/workflows/**'
+      - ".github/workflows/**"
   pull_request:
     branches: [main]
     paths:
-      - '.github/workflows/**'
+      - ".github/workflows/**"
 
 jobs:
   check-runner-types:
     name: Verify GitHub-hosted only
     runs-on: ubuntu-latest
-    
+
     steps:
       - name: Checkout
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -34,9 +34,9 @@ jobs:
       - name: Check for self-hosted references
         run: |
           echo "🔍 Scanning workflows for self-hosted runner references..."
-          
+
           VIOLATIONS=""
-          
+
           # Check all workflow files
           for file in .github/workflows/*.yml .github/workflows/*.yaml; do
             [ -f "$file" ] || continue
@@ -52,7 +52,7 @@ jobs:
             fi
             
             # Check for internal runner labels in runs-on
-            if grep -E "^\s*runs-on:.*tagsdev|host-tagsdev" "$file" 2>/dev/null; then
+            if grep -E "^\s*runs-on:.*(tagsdev|host-tagsdev)" "$file" 2>/dev/null; then
               VIOLATIONS="${VIOLATIONS}\n❌ $file: Contains internal runner label"
             fi
             
@@ -61,7 +61,7 @@ jobs:
               VIOLATIONS="${VIOLATIONS}\n❌ $file: Has self-hosted as default"
             fi
           done
-          
+
           if [ -n "$VIOLATIONS" ]; then
             echo ""
             echo "════════════════════════════════════════════════════════════"
@@ -79,5 +79,5 @@ jobs:
             echo "     or change runs-on to GitHub-hosted runner."
             exit 1
           fi
-          
+
           echo "✅ All workflows use GitHub-hosted runners only"
