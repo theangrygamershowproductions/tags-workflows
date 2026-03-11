@@ -2,8 +2,28 @@
 # Pre-commit hook to enforce AI context management standards
 # Version: 1.0 | Created: 2025-01-10
 
-# Source color utilities
-source "/home/potato/TAGS/shared/scripts/color_utils.sh"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SEARCH_DIR="$SCRIPT_DIR"
+COLOR_UTILS=""
+
+while [[ "$SEARCH_DIR" != "/" ]]; do
+    if [[ -f "$SEARCH_DIR/shared/scripts/color_utils.sh" ]]; then
+        COLOR_UTILS="$SEARCH_DIR/shared/scripts/color_utils.sh"
+        break
+    fi
+    SEARCH_DIR="$(dirname "$SEARCH_DIR")"
+done
+
+if [[ -n "$COLOR_UTILS" ]]; then
+    # shellcheck disable=SC1090
+    source "$COLOR_UTILS"
+fi
+
+if ! command -v bot >/dev/null 2>&1; then
+    bot() {
+        echo "$*"
+    }
+fi
 
 # Centralized logging setup
 SCRIPT_NAME="check_instruction_quality.sh"
