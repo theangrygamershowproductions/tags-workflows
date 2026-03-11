@@ -26,7 +26,7 @@ on:
 
 jobs:
   ci:
-    uses: theangrygamershowproductions/tags-workflows/.github/workflows/ci-lite.yml@shared-ci-v1
+    uses: theangrygamershowproductions/tags-workflows/.github/workflows/ci-lite.yml@0123456789abcdef0123456789abcdef01234567
     with:
       node_version: "20"
       python_version: "3.12"
@@ -34,14 +34,9 @@ jobs:
     secrets: inherit
 ```
 
-## 🔒 Premium Workflows
-
-For advanced AI-powered code analysis and premium features, see our private `AI-CI-Toolkit` (organization members only).
-
 ## 📋 Versioning
 
-- **`@shared-ci-v1`** - Stable public API, recommended for production use
-- **`@main`** - Latest development version (use with caution)
+- **`@0123456789abcdef0123456789abcdef01234567`** - Immutable SHA pin (required)
 
 ## 🤝 Contributing
 

@@ -1,20 +1,28 @@
 # tags-workflows - Deployment Guide
 
-**Complete walkthrough for deploying tags-workflows**
+## Authority & Scope
 
-**Estimated Time**: {duration} | **Complexity**: {Beginner|Intermediate|Advanced} | **Authority**: Documentation + validation scripts
+**Binding Sources**: Root TAGS CORE-6 + DEC-014
+**Classification**: Derived execution document (public lane deployment)
+**Allowed Changes**: Deployment procedures, workflow contract details, local validation
+**NOT Allowed Without Root ADR**: Lane scope (public/GitHub-hosted), trust boundary, runner model
+**Note**: Root TAGS-META defines lane architecture. This guide executes the public/untrusted CI lane per DEC-014. 
+
+## Complete walkthrough for deploying tags-workflows
+
+**Estimated Time**: 2-4 hours per migration wave | **Complexity**: Intermediate | **Authority**: Root TAGS-META CORE-6 + DEC-014 + local validation scripts
 
 ---
 
 ## Overview
 
-This guide covers deploying tags-workflows. You'll:
+This guide covers deploying tags-workflows (public/untrusted CI lane, GitHub-hosted runners). You'll:
 
-- {Step 1 overview}
-- {Step 2 overview}
-- {Step 3 overview}
+- harden public/untrusted reusable workflow contracts
+- migrate public consumers by matrix wave
+- validate contract behavior and cut over with rollback controls
 
-**What you'll have when done**: {End state description}
+**What you'll have when done**: a validated public shared workflow platform with matrix-tracked migrations and immutable SHA references.
 
 ---
 
@@ -22,23 +30,23 @@ This guide covers deploying tags-workflows. You'll:
 
 ### ⚙️ CURRENT STATE (Phase 0)
 
-{Honest description of current deployment reality}
+CORE-6 structure exists and reusable workflow baseline is present, but public/untrusted CI consumer matrix execution and migration evidence are incomplete.
 
 **Known Gaps**:
 
-- {Gap 1 with reference to remediation plan}
-- {Gap 2 with timeline for fix}
+- matrix rows for public/untrusted CI consumers are not fully populated with wave and status
+- shared contract conformance checks are not yet tied to every migration task
 
 **This is what you're implementing in this guide.**
 
 ### 🎯 TARGET STATE (Phase 1+)
 
-{Desired architecture with improvements}
+This repository operates as the canonical public/untrusted reusable workflow source, with all mapped consumers migrated through validated waves and immutable SHA references.
 
 **Remediation Required**:
 
-- {Required change 1 - see TODO.md Phase X}
-- {Required change 2 - see ROADMAP.md vX.X}
+- complete public/untrusted CI matrix and execute Waves 1-3
+- pass contract and cutover gates by roadmap milestone windows
 
 ---
 
@@ -46,45 +54,49 @@ This guide covers deploying tags-workflows. You'll:
 
 ### Required Tools
 
-- {Tool 1} v{version}
-- {Tool 2} v{version}
+- GitHub CLI (`gh`) latest stable
+- Bash with standard GNU tooling (`jq`, `grep`, `sed`)
 
 ### Required Access
 
-- {Access requirement 1}
-- {Access requirement 2}
+- Access to consumer repositories in public/untrusted CI migration scope
+- Permission to run and validate reusable workflows in public/untrusted CI lanes
 
 ### Required Knowledge
 
-- {Skill/knowledge area 1}
-- {Skill/knowledge area 2}
+- TAGS two-tier runner policy and action pinning policy
+- Shared reusable workflow routing and exception handling semantics
 
 ---
 
 ## Deployment Steps
 
-### Step 1: {Step Name}
+### Step 1: Confirm matrix assignment
 
-{Detailed instructions}
+Confirm the consumer repository row in the root matrix has owner, wave, target reusable workflow, and rollback owner assigned.
 
 **Validation**:
+
 ```bash
-# Command to verify success
-{validation command}
+# Validate local CORE-6 and workflow structure
+./scripts/check_core6_compliance.sh
 ```
 
 Expected output:
-```
-{expected output}
+
+```text
+CORE-6 compliance check passes with no missing required documents.
 ```
 
-### Step 2: {Step Name}
+### Step 2: Apply migration in target consumer repository
 
-{Detailed instructions}
+Replace authoritative local workflow logic with pinned reusable calls from `tags-workflows`. Use wrapper workflows only when trigger customization is required.
 
 **Validation**:
+
 ```bash
-{validation command}
+# Validate immutable workflow refs in changed workflow files
+grep -R "uses: theangrygamershowproductions/tags-workflows/.github/workflows/" .github/workflows | cat
 ```
 
 ---
@@ -94,34 +106,40 @@ Expected output:
 ### Health Checks
 
 ```bash
-# Check 1
-{command}
+# Check 1: local CORE-6 continuity
+./scripts/check_core6_compliance.sh
 
-# Check 2
-{command}
+# Check 2: verify latest workflow runs
+gh run list --limit 5
 ```
 
 ### Expected State
 
-- {Validation criterion 1}
-- {Validation criterion 2}
+- consumer repo uses pinned reusable workflow refs from this repository
+- matrix row updated to Validated or Cutover Complete
 
 ---
 
 ## Troubleshooting
 
-### Issue: {Common Problem}
+### Issue: Contract behavior mismatch after migration
 
 **Symptoms**:
 
-- {Symptom 1}
-- {Symptom 2}
+- workflow path selection diverges from shared contract behavior
+- repo-specific exception flow conflicts with shared reusable interface
 
 **Solution**:
 
 ```bash
-{fix command}
+# inspect workflow triggers and shared contract conditions in target repo
+grep -R "pull_request\|pull_request_target\|workflow_call" .github/workflows | cat
 ```
+
+## Source Of Truth
+
+- Root TAGS CORE-6 remains authoritative for ecosystem matrix and governance gates.
+- This repository CORE-6 is a derived execution layer for public/untrusted CI implementation details.
 
 ---
 
@@ -131,3 +149,4 @@ Expected output:
 - [TODO.md](TODO.md) - Deployment task breakdown
 - [ROADMAP.md](ROADMAP.md) - Target version timeline
 - [PROGRESS.md](PROGRESS.md) - Known deployment gaps
+- [TAGS Root DEPLOYMENT.md](../../DEPLOYMENT.md) - Root control-plane runbook

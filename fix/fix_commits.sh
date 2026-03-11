@@ -2,8 +2,22 @@
 # Auto-generated commit fix script
 set -e
 
-# Source color utilities
-source "/home/potato/TAGS/shared/scripts/color_utils.sh"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SEARCH_DIR="$SCRIPT_DIR"
+COLOR_UTILS=""
+
+while [[ "$SEARCH_DIR" != "/" ]]; do
+	if [[ -f "$SEARCH_DIR/shared/scripts/color_utils.sh" ]]; then
+		COLOR_UTILS="$SEARCH_DIR/shared/scripts/color_utils.sh"
+		break
+	fi
+	SEARCH_DIR="$(dirname "$SEARCH_DIR")"
+done
+
+if [[ -n "$COLOR_UTILS" ]]; then
+	# shellcheck disable=SC1090
+	source "$COLOR_UTILS"
+fi
 
 # Centralized logging setup
 SCRIPT_NAME="fix_commits.sh"
