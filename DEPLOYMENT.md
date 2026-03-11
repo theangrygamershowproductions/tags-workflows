@@ -82,12 +82,10 @@ Confirm the consumer repository row in the root matrix has owner, wave, target r
 ./scripts/check_core6_compliance.sh
 ```
 
-Expected output:
+Expected result:
 
-```text
-- All reported checks show PASS for each required CORE-6 document or file.
-- The script finishes with a final summary line reporting COMPLIANT.
-```
+- All reported checks show `PASS` for each required CORE-6 document or file.
+- The script finishes with a final summary line reporting `COMPLIANT`.
 
 ### Step 2: Apply migration in target consumer repository
 
