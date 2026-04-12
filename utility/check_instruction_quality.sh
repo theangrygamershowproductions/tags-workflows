@@ -3,7 +3,14 @@
 # Version: 1.0 | Created: 2025-01-10
 
 # Source color utilities
-source "/home/potato/TAGS/shared/scripts/color_utils.sh"
+TAGS_ROOT="$(git rev-parse --show-superproject-working-tree 2>/dev/null || git rev-parse --show-toplevel 2>/dev/null || pwd)"
+COLOR_UTILS="${TAGS_ROOT}/shared/scripts/color_utils.sh"
+if [[ ! -f "$COLOR_UTILS" ]]; then
+    echo "ERROR: color_utils.sh not found at $COLOR_UTILS"
+    exit 1
+fi
+# shellcheck source=/dev/null
+source "$COLOR_UTILS"
 
 # Centralized logging setup
 SCRIPT_NAME="check_instruction_quality.sh"

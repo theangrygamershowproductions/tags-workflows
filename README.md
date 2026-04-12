@@ -26,7 +26,7 @@ on:
 
 jobs:
   ci:
-    uses: theangrygamershowproductions/tags-workflows/.github/workflows/ci-lite.yml@shared-ci-v1
+    uses: theangrygamershowproductions/tags-workflows/.github/workflows/ci-lite.yml@ef51fe0ce0037315e6d3d2c521fa913629ae0c17
     with:
       node_version: "20"
       python_version: "3.12"

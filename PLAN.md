@@ -44,4 +44,4 @@ Define the strategic direction, risk posture, and decision gates for `tags-workf
 - [TODO.md](TODO.md) - Task execution tracking
 - [ROADMAP.md](ROADMAP.md) - Version timeline
 - [DEPLOYMENT.md](DEPLOYMENT.md) - Architecture decisions
-- [CORE-6 Standard](/home/potato/TAGS/TAGS_KB/30_CORE6_STANDARD.md)
+- [CORE-6 Standard](../../TAGS_KB/30_CORE6_STANDARD.md)
