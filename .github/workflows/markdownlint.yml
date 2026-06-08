@@ -1,0 +1,124 @@
+name: Markdownlint Reusable
+
+on:
+  workflow_call:
+    inputs:
+      markdownlint_config:
+        description: Path to markdownlint configuration file
+        required: false
+        type: string
+        default: ".markdownlint.json"
+      include_glob:
+        description: Glob passed to markdownlint-cli2 for included files
+        required: false
+        type: string
+        default: "**/*.md"
+      exclude_glob:
+        description: Space-separated markdownlint-cli2 ignore globs prefixed with '#'
+        required: false
+        type: string
+        default: "#node_modules #.git"
+      base_sha:
+        description: Optional base SHA for diff-based applicability gating
+        required: false
+        type: string
+        default: ""
+      head_sha:
+        description: Optional head SHA for diff-based applicability gating
+        required: false
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  markdownlint:
+    name: Markdownlint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Detect markdownlint scope changes
+        id: scope
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          BASE_SHA="${{ inputs.base_sha }}"
+          HEAD_SHA="${{ inputs.head_sha }}"
+
+          if [[ -z "$BASE_SHA" || -z "$HEAD_SHA" ]]; then
+            echo "should_run=true" >> "$GITHUB_OUTPUT"
+            echo "scope_reason=no base/head provided; full lint" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if ! git rev-parse --verify "$BASE_SHA" >/dev/null 2>&1; then
+            echo "should_run=true" >> "$GITHUB_OUTPUT"
+            echo "scope_reason=base sha unavailable locally; full lint" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if ! git rev-parse --verify "$HEAD_SHA" >/dev/null 2>&1; then
+            echo "should_run=true" >> "$GITHUB_OUTPUT"
+            echo "scope_reason=head sha unavailable locally; full lint" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          changed_files="$(git diff --name-only "$BASE_SHA" "$HEAD_SHA")"
+          lint_scope="$(printf '%s\n' "$changed_files" | grep -E '(^|/)\.markdownlint\.json$|(^|/)\.markdownlintignore$|\.md$' || true)"
+
+          if [[ -n "$lint_scope" ]]; then
+            echo "should_run=true" >> "$GITHUB_OUTPUT"
+            echo "scope_reason=markdown/config change detected" >> "$GITHUB_OUTPUT"
+          else
+            echo "should_run=false" >> "$GITHUB_OUTPUT"
+            echo "scope_reason=no markdown/config changes" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Setup Node.js
+        if: steps.scope.outputs.should_run == 'true'
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: "20"
+
+      - name: Install markdownlint-cli2
+        if: steps.scope.outputs.should_run == 'true'
+        run: npm install -g markdownlint-cli2@0.18.1
+
+      - name: Lint Markdown
+        if: steps.scope.outputs.should_run == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          IFS=' ' read -r -a excludes <<< "${{ inputs.exclude_glob }}"
+          lint_args=("${{ inputs.include_glob }}")
+          for pattern in "${excludes[@]}"; do
+            [[ -n "$pattern" ]] && lint_args+=("$pattern")
+          done
+
+          if [[ -f "${{ inputs.markdownlint_config }}" ]]; then
+            markdownlint-cli2 "${lint_args[@]}" --config "${{ inputs.markdownlint_config }}"
+          else
+            markdownlint-cli2 "${lint_args[@]}"
+          fi
+
+      - name: Mark as not applicable
+        if: steps.scope.outputs.should_run != 'true'
+        run: |
+          echo "Markdownlint not applicable for this diff."
+
+      - name: Report summary
+        if: always()
+        run: |
+          echo "## Markdownlint Reusable" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Applicable: ${{ steps.scope.outputs.should_run }} (${{ steps.scope.outputs.scope_reason }})" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Runner: ubuntu-latest" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Secrets: none" >> "$GITHUB_STEP_SUMMARY"
