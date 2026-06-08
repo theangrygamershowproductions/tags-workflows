@@ -8,6 +8,7 @@ This repository contains **generic, open-source reusable GitHub Actions workflow
 
 - **`ci-lite.yml`** - Lightweight CI with Node.js and Python support, linting, and testing
 - **`docs-governance.yml`** - Documentation validation, link checking, and governance compliance
+- **`markdownlint.yml`** - Reusable markdown linting with optional diff-based applicability gating
 - **`project-health.yml`** - Project health metrics, dependency auditing, and quality gates
 
 ### Composite Actions
