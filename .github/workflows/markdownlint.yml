@@ -75,10 +75,23 @@ jobs:
 
           if [[ -n "$lint_scope" ]]; then
             echo "should_run=true" >> "$GITHUB_OUTPUT"
-            echo "scope_reason=markdown/config change detected" >> "$GITHUB_OUTPUT"
+
+            # Determine whether a markdownlint config file changed; if so we
+            # must re-lint every .md file (config change could affect all files).
+            config_changed="$(printf '%s\n' "$lint_scope" | grep -E '(^|/)\.markdownlint\.json$|(^|/)\.markdownlintignore$' || true)"
+            if [[ -n "$config_changed" ]]; then
+              echo "scope_reason=markdownlint config changed; full lint" >> "$GITHUB_OUTPUT"
+              echo "lint_files=" >> "$GITHUB_OUTPUT"
+            else
+              # Only .md files changed — pass their paths so lint is scoped.
+              md_files="$(printf '%s\n' "$lint_scope" | grep '\.md$' | tr '\n' ' ' | sed 's/ $//')"
+              echo "scope_reason=markdown change detected; scoped lint" >> "$GITHUB_OUTPUT"
+              echo "lint_files=$md_files" >> "$GITHUB_OUTPUT"
+            fi
           else
             echo "should_run=false" >> "$GITHUB_OUTPUT"
             echo "scope_reason=no markdown/config changes" >> "$GITHUB_OUTPUT"
+            echo "lint_files=" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Setup Node.js
@@ -98,7 +111,22 @@ jobs:
           set -euo pipefail
 
           IFS=' ' read -r -a excludes <<< "${{ inputs.exclude_glob }}"
-          lint_args=("${{ inputs.include_glob }}")
+
+          # When base/head SHAs were provided and only .md files changed, lint
+          # only those changed files.  When a markdownlint config file changed
+          # (or no SHAs were provided), lint_files is empty and we fall back to
+          # the full include_glob so every file is checked against the new config.
+          lint_files="${{ steps.scope.outputs.lint_files }}"
+
+          if [[ -n "$lint_files" ]]; then
+            # Scoped lint: build args from the changed-file list.
+            IFS=' ' read -r -a file_args <<< "$lint_files"
+            lint_args=("${file_args[@]}")
+          else
+            # Full lint: use the caller-supplied glob.
+            lint_args=("${{ inputs.include_glob }}")
+          fi
+
           for pattern in "${excludes[@]}"; do
             [[ -n "$pattern" ]] && lint_args+=("$pattern")
           done
@@ -120,5 +148,11 @@ jobs:
           echo "## Markdownlint Reusable" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
           echo "- Applicable: ${{ steps.scope.outputs.should_run }} (${{ steps.scope.outputs.scope_reason }})" >> "$GITHUB_STEP_SUMMARY"
+          lint_files="${{ steps.scope.outputs.lint_files }}"
+          if [[ -n "$lint_files" ]]; then
+            echo "- Scope: changed files only" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "- Scope: full repo glob" >> "$GITHUB_STEP_SUMMARY"
+          fi
           echo "- Runner: ubuntu-latest" >> "$GITHUB_STEP_SUMMARY"
           echo "- Secrets: none" >> "$GITHUB_STEP_SUMMARY"

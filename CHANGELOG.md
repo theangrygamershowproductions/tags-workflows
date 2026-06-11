@@ -15,6 +15,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- `markdownlint.yml` reusable workflow now lints only changed `.md` files when
+  `base_sha`/`head_sha` are provided and only `.md` files (no markdownlint
+  config) changed. Previously the scoped diff was used only to decide *whether*
+  to run; the lint step always scanned the full repo glob. Now the changed-file
+  list is emitted as a `lint_files` step output and used as the lint target,
+  falling back to the full `include_glob` only when a markdownlint config file
+  changed or no SHAs were provided. Fixes #658 (TAGS-META).
+
 ### Added (Initial Release)
 
 - Initial repository structure
