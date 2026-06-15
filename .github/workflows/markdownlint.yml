@@ -28,6 +28,13 @@ on:
         required: false
         type: string
         default: ""
+      scope_mode:
+        description: >-
+          Enforcement scope for scoped runs: changed-files (default) or
+          changed-lines (only fail on edited lines when base/head are present)
+        required: false
+        type: string
+        default: "changed-files"
 
 permissions:
   contents: read
@@ -46,11 +53,14 @@ jobs:
       - name: Detect markdownlint scope changes
         id: scope
         shell: bash
+        env:
+          INPUT_BASE_SHA: ${{ inputs.base_sha }}
+          INPUT_HEAD_SHA: ${{ inputs.head_sha }}
         run: |
           set -euo pipefail
 
-          BASE_SHA="${{ inputs.base_sha }}"
-          HEAD_SHA="${{ inputs.head_sha }}"
+          BASE_SHA="$INPUT_BASE_SHA"
+          HEAD_SHA="$INPUT_HEAD_SHA"
 
           if [[ -z "$BASE_SHA" || -z "$HEAD_SHA" ]]; then
             echo "should_run=true" >> "$GITHUB_OUTPUT"
@@ -84,9 +94,13 @@ jobs:
               echo "lint_files=" >> "$GITHUB_OUTPUT"
             else
               # Only .md files changed — pass their paths so lint is scoped.
-              md_files="$(printf '%s\n' "$lint_scope" | grep '\.md$' | tr '\n' ' ' | sed 's/ $//')"
+              md_files="$(printf '%s\n' "$lint_scope" | grep '\.md$' || true)"
               echo "scope_reason=markdown change detected; scoped lint" >> "$GITHUB_OUTPUT"
-              echo "lint_files=$md_files" >> "$GITHUB_OUTPUT"
+              {
+                echo "lint_files<<EOF"
+                printf '%s\n' "$md_files"
+                echo "EOF"
+              } >> "$GITHUB_OUTPUT"
             fi
           else
             echo "should_run=false" >> "$GITHUB_OUTPUT"
@@ -107,35 +121,123 @@ jobs:
       - name: Lint Markdown
         if: steps.scope.outputs.should_run == 'true'
         shell: bash
+        env:
+          INPUT_EXCLUDE_GLOB: ${{ inputs.exclude_glob }}
+          INPUT_INCLUDE_GLOB: ${{ inputs.include_glob }}
+          INPUT_MARKDOWNLINT_CONFIG: ${{ inputs.markdownlint_config }}
+          INPUT_BASE_SHA: ${{ inputs.base_sha }}
+          INPUT_HEAD_SHA: ${{ inputs.head_sha }}
+          INPUT_SCOPE_MODE: ${{ inputs.scope_mode }}
+          SCOPE_LINT_FILES: ${{ steps.scope.outputs.lint_files }}
         run: |
           set -euo pipefail
 
-          IFS=' ' read -r -a excludes <<< "${{ inputs.exclude_glob }}"
+          IFS=' ' read -r -a excludes <<< "$INPUT_EXCLUDE_GLOB"
+          BASE_SHA="$INPUT_BASE_SHA"
+          HEAD_SHA="$INPUT_HEAD_SHA"
+          SCOPE_MODE="$INPUT_SCOPE_MODE"
 
           # When base/head SHAs were provided and only .md files changed, lint
           # only those changed files.  When a markdownlint config file changed
           # (or no SHAs were provided), lint_files is empty and we fall back to
           # the full include_glob so every file is checked against the new config.
-          lint_files="${{ steps.scope.outputs.lint_files }}"
+          lint_files="$SCOPE_LINT_FILES"
 
           if [[ -n "$lint_files" ]]; then
             # Scoped lint: build args from the changed-file list.
-            IFS=' ' read -r -a file_args <<< "$lint_files"
-            lint_args=("${file_args[@]}")
+            mapfile -t file_args <<< "$lint_files"
+            lint_args=()
+            for file in "${file_args[@]}"; do
+              [[ -n "$file" ]] || continue
+              if [[ "$file" == -* ]]; then
+                lint_args+=("./$file")
+              else
+                lint_args+=("$file")
+              fi
+            done
           else
             # Full lint: use the caller-supplied glob.
-            lint_args=("${{ inputs.include_glob }}")
+            lint_args=("$INPUT_INCLUDE_GLOB")
           fi
 
           for pattern in "${excludes[@]}"; do
             [[ -n "$pattern" ]] && lint_args+=("$pattern")
           done
 
-          if [[ -f "${{ inputs.markdownlint_config }}" ]]; then
-            markdownlint-cli2 "${lint_args[@]}" --config "${{ inputs.markdownlint_config }}"
-          else
-            markdownlint-cli2 "${lint_args[@]}"
+          if [[ "$SCOPE_MODE" != "changed-files" && "$SCOPE_MODE" != "changed-lines" ]]; then
+            echo "Invalid scope_mode: $SCOPE_MODE (expected changed-files or changed-lines)" >&2
+            exit 2
           fi
+
+          mdcmd=(markdownlint-cli2)
+          if [[ -f "$INPUT_MARKDOWNLINT_CONFIG" ]]; then
+            mdcmd+=(--config "$INPUT_MARKDOWNLINT_CONFIG")
+          fi
+          mdcmd+=(-- "${lint_args[@]}")
+
+          # Default contract: full-file lint against scoped files.
+          if [[ "$SCOPE_MODE" != "changed-lines" || -z "$lint_files" || -z "$BASE_SHA" || -z "$HEAD_SHA" ]]; then
+            "${mdcmd[@]}"
+            exit 0
+          fi
+
+          # Changed-lines mode: filter lint failures to edited lines only.
+          issues_file="$(mktemp)"
+          lint_exit_code=0
+          if "${mdcmd[@]}" >"$issues_file" 2>&1; then
+            rm -f "$issues_file"
+            exit 0
+          else
+            lint_exit_code=$?
+          fi
+
+          if [[ "$lint_exit_code" -ne 1 ]]; then
+            cat "$issues_file"
+            rm -f "$issues_file"
+            exit "$lint_exit_code"
+          fi
+
+          changed_lines_file="$(mktemp)"
+          while IFS= read -r file; do
+            [[ -n "$file" ]] || continue
+            normalized_file="${file#./}"
+            git diff -U0 "$BASE_SHA" "$HEAD_SHA" -- "$file" \
+              | awk -v f="$normalized_file" '
+                  /^@@ / {
+                    line=$0
+                    sub(/^.*\+/, "", line)
+                    sub(/ .*/, "", line)
+                    split(line, parts, ",")
+                    start=parts[1]+0
+                    count=(parts[2]=="" ? 1 : parts[2]+0)
+                    if (count > 0) {
+                      for (i=0; i<count; i++) print f":"(start+i)
+                    }
+                  }
+                '
+          done <<< "$lint_files" \
+            | sort -u > "$changed_lines_file"
+
+          filtered_count=0
+          while IFS= read -r line; do
+            if [[ "$line" =~ ^([^:]+):([0-9]+)(:[0-9]+)?[[:space:]] ]]; then
+              path="${BASH_REMATCH[1]#./}"
+              key="$path:${BASH_REMATCH[2]}"
+              if grep -Fxq "$key" "$changed_lines_file"; then
+                echo "$line"
+                filtered_count=$((filtered_count + 1))
+              fi
+            fi
+          done < "$issues_file"
+
+          rm -f "$issues_file" "$changed_lines_file"
+
+          if [[ "$filtered_count" -gt 0 ]]; then
+            echo "Changed-lines mode: $filtered_count violation(s) on edited lines." >&2
+            exit 1
+          fi
+
+          echo "Changed-lines mode: no violations on edited lines. Historical unchanged-line debt ignored."
 
       - name: Mark as not applicable
         if: steps.scope.outputs.should_run != 'true'
@@ -144,13 +246,23 @@ jobs:
 
       - name: Report summary
         if: always()
+        env:
+          SCOPE_SHOULD_RUN: ${{ steps.scope.outputs.should_run }}
+          SCOPE_REASON: ${{ steps.scope.outputs.scope_reason }}
+          INPUT_SCOPE_MODE: ${{ inputs.scope_mode }}
+          SCOPE_LINT_FILES: ${{ steps.scope.outputs.lint_files }}
         run: |
           echo "## Markdownlint Reusable" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "- Applicable: ${{ steps.scope.outputs.should_run }} (${{ steps.scope.outputs.scope_reason }})" >> "$GITHUB_STEP_SUMMARY"
-          lint_files="${{ steps.scope.outputs.lint_files }}"
+          echo "- Applicable: $SCOPE_SHOULD_RUN ($SCOPE_REASON)" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Scope mode: $INPUT_SCOPE_MODE" >> "$GITHUB_STEP_SUMMARY"
+          lint_files="$SCOPE_LINT_FILES"
           if [[ -n "$lint_files" ]]; then
-            echo "- Scope: changed files only" >> "$GITHUB_STEP_SUMMARY"
+            if [[ "$INPUT_SCOPE_MODE" == "changed-lines" ]]; then
+              echo "- Scope: changed files with edited-line filtering" >> "$GITHUB_STEP_SUMMARY"
+            else
+              echo "- Scope: changed files only" >> "$GITHUB_STEP_SUMMARY"
+            fi
           else
             echo "- Scope: full repo glob" >> "$GITHUB_STEP_SUMMARY"
           fi
