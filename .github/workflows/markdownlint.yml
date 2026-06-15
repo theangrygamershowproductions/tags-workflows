@@ -114,13 +114,17 @@ jobs:
       - name: Lint Markdown
         if: steps.scope.outputs.should_run == 'true'
         shell: bash
+        env:
+          INPUT_BASE_SHA: ${{ inputs.base_sha }}
+          INPUT_HEAD_SHA: ${{ inputs.head_sha }}
+          INPUT_SCOPE_MODE: ${{ inputs.scope_mode }}
         run: |
           set -euo pipefail
 
           IFS=' ' read -r -a excludes <<< "${{ inputs.exclude_glob }}"
-          BASE_SHA="${{ inputs.base_sha }}"
-          HEAD_SHA="${{ inputs.head_sha }}"
-          SCOPE_MODE="${{ inputs.scope_mode }}"
+          BASE_SHA="$INPUT_BASE_SHA"
+          HEAD_SHA="$INPUT_HEAD_SHA"
+          SCOPE_MODE="$INPUT_SCOPE_MODE"
 
           # When base/head SHAs were provided and only .md files changed, lint
           # only those changed files.  When a markdownlint config file changed
