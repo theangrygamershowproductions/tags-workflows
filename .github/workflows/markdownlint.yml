@@ -94,9 +94,13 @@ jobs:
               echo "lint_files=" >> "$GITHUB_OUTPUT"
             else
               # Only .md files changed — pass their paths so lint is scoped.
-              md_files="$(printf '%s\n' "$lint_scope" | grep '\.md$' | tr '\n' ' ' | sed 's/ $//')"
+              md_files="$(printf '%s\n' "$lint_scope" | grep '\.md$' || true)"
               echo "scope_reason=markdown change detected; scoped lint" >> "$GITHUB_OUTPUT"
-              echo "lint_files=$md_files" >> "$GITHUB_OUTPUT"
+              {
+                echo "lint_files<<EOF"
+                printf '%s\n' "$md_files"
+                echo "EOF"
+              } >> "$GITHUB_OUTPUT"
             fi
           else
             echo "should_run=false" >> "$GITHUB_OUTPUT"
@@ -141,8 +145,16 @@ jobs:
 
           if [[ -n "$lint_files" ]]; then
             # Scoped lint: build args from the changed-file list.
-            IFS=' ' read -r -a file_args <<< "$lint_files"
-            lint_args=("${file_args[@]}")
+            mapfile -t file_args <<< "$lint_files"
+            lint_args=()
+            for file in "${file_args[@]}"; do
+              [[ -n "$file" ]] || continue
+              if [[ "$file" == -* ]]; then
+                lint_args+=("./$file")
+              else
+                lint_args+=("$file")
+              fi
+            done
           else
             # Full lint: use the caller-supplied glob.
             lint_args=("$INPUT_INCLUDE_GLOB")
@@ -157,10 +169,11 @@ jobs:
             exit 2
           fi
 
-          mdcmd=(markdownlint-cli2 "${lint_args[@]}")
+          mdcmd=(markdownlint-cli2)
           if [[ -f "$INPUT_MARKDOWNLINT_CONFIG" ]]; then
             mdcmd+=(--config "$INPUT_MARKDOWNLINT_CONFIG")
           fi
+          mdcmd+=(-- "${lint_args[@]}")
 
           # Default contract: full-file lint against scoped files.
           if [[ "$SCOPE_MODE" != "changed-lines" || -z "$lint_files" || -z "$BASE_SHA" || -z "$HEAD_SHA" ]]; then
@@ -192,7 +205,7 @@ jobs:
                     }
                   }
                 '
-          done <<< "$(printf '%s' "$lint_files" | tr ' ' '\n')" \
+          done <<< "$lint_files" \
             | sort -u > "$changed_lines_file"
 
           filtered_count=0
