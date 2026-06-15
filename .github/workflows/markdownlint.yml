@@ -183,16 +183,26 @@ jobs:
 
           # Changed-lines mode: filter lint failures to edited lines only.
           issues_file="$(mktemp)"
+          lint_exit_code=0
           if "${mdcmd[@]}" >"$issues_file" 2>&1; then
             rm -f "$issues_file"
             exit 0
+          else
+            lint_exit_code=$?
+          fi
+
+          if [[ "$lint_exit_code" -ne 1 ]]; then
+            cat "$issues_file"
+            rm -f "$issues_file"
+            exit "$lint_exit_code"
           fi
 
           changed_lines_file="$(mktemp)"
           while IFS= read -r file; do
             [[ -n "$file" ]] || continue
+            normalized_file="${file#./}"
             git diff -U0 "$BASE_SHA" "$HEAD_SHA" -- "$file" \
-              | awk -v f="$file" '
+              | awk -v f="$normalized_file" '
                   /^@@ / {
                     line=$0
                     sub(/^.*\+/, "", line)
@@ -211,7 +221,8 @@ jobs:
           filtered_count=0
           while IFS= read -r line; do
             if [[ "$line" =~ ^([^:]+):([0-9]+)(:[0-9]+)?[[:space:]] ]]; then
-              key="${BASH_REMATCH[1]}:${BASH_REMATCH[2]}"
+              path="${BASH_REMATCH[1]#./}"
+              key="$path:${BASH_REMATCH[2]}"
               if grep -Fxq "$key" "$changed_lines_file"; then
                 echo "$line"
                 filtered_count=$((filtered_count + 1))
@@ -247,7 +258,11 @@ jobs:
           echo "- Scope mode: $INPUT_SCOPE_MODE" >> "$GITHUB_STEP_SUMMARY"
           lint_files="$SCOPE_LINT_FILES"
           if [[ -n "$lint_files" ]]; then
-            echo "- Scope: changed files only" >> "$GITHUB_STEP_SUMMARY"
+            if [[ "$INPUT_SCOPE_MODE" == "changed-lines" ]]; then
+              echo "- Scope: changed files with edited-line filtering" >> "$GITHUB_STEP_SUMMARY"
+            else
+              echo "- Scope: changed files only" >> "$GITHUB_STEP_SUMMARY"
+            fi
           else
             echo "- Scope: full repo glob" >> "$GITHUB_STEP_SUMMARY"
           fi
