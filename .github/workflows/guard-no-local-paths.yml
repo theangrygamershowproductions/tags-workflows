@@ -1,0 +1,24 @@
+name: Guard - No Local Paths
+
+on:
+    workflow_call:
+
+jobs:
+    guard-no-local-paths:
+        name: Check for Local Paths
+        runs-on: ubuntu-latest
+
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v4
+              with:
+                  fetch-depth: 0
+
+            - name: Run Guard
+              run: |
+                  # Make script executable
+                  chmod +x scripts/validate_no_local_paths.sh
+
+                  # Run guard in CI mode (checks all tracked files)
+                  ./scripts/validate_no_local_paths.sh --all --verbose
+              shell: bash

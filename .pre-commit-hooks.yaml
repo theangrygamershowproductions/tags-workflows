@@ -1,0 +1,10 @@
+hooks:
+  - id: no-local-paths
+    name: No Local Paths
+    description: Prevent hardcoded local filesystem paths from being committed
+    entry: scripts/validate_no_local_paths.sh --staged
+    language: script
+    types: [text]
+    stages: [commit]
+    fail_fast: false
+    pass_filenames: false
