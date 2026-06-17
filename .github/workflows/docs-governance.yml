@@ -1,199 +1,199 @@
 name: Documentation Governance
 
 on:
-   workflow_call:
-      inputs:
-         vale_config:
-            description: "Path to Vale configuration file"
-            required: false
-            type: string
-            default: ".vale.ini"
-         markdownlint_config:
-            description: "Path to markdownlint configuration"
-            required: false
-            type: string
-            default: ".markdownlint.json"
-         check_links:
-            description: "Enable link checking"
-            required: false
-            type: boolean
-            default: true
-         skip_vale:
-            description: "Skip Vale prose linting"
-            required: false
-            type: boolean
-            default: false
-      secrets:
-         GH_TOKEN:
-            required: false
+  workflow_call:
+    inputs:
+      vale_config:
+        description: "Path to Vale configuration file"
+        required: false
+        type: string
+        default: ".vale.ini"
+      markdownlint_config:
+        description: "Path to markdownlint configuration"
+        required: false
+        type: string
+        default: ".markdownlint.json"
+      check_links:
+        description: "Enable link checking"
+        required: false
+        type: boolean
+        default: true
+      skip_vale:
+        description: "Skip Vale prose linting"
+        required: false
+        type: boolean
+        default: false
+    secrets:
+      GH_TOKEN:
+        required: false
 
 jobs:
-   documentation-quality:
-      name: Documentation Quality Check
-      runs-on: ubuntu-latest
-      permissions:
-         contents: read
-         pull-requests: write
-         checks: write
+  documentation-quality:
+    name: Documentation Quality Check
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+      checks: write
 
-      steps:
-         - name: Checkout repository
-           uses: actions/checkout@v4
-           with:
-              fetch-depth: 0
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-         - name: Setup Node.js for tooling
-           uses: actions/setup-node@v4
-           with:
-              node-version: "20"
-              cache: "npm"
+      - name: Setup Node.js for tooling
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
 
-         - name: Install documentation tools
-           run: |
-              # Install markdownlint-cli2
-              npm install -g markdownlint-cli2
+      - name: Install documentation tools
+        run: |
+          # Install markdownlint-cli2 with version pinning per ACTIONS_POLICY.md
+          npm install -g markdownlint-cli2@0.21.0
 
-              # Install link checker
-              if [ "${{ inputs.check_links }}" = "true" ]; then
-                npm install -g markdown-link-check
-              fi
+          # Install link checker
+          if [ "${{ inputs.check_links }}" = "true" ]; then
+            npm install -g markdown-link-check
+          fi
 
-              echo "✅ Documentation tools installed"
+          echo "✅ Documentation tools installed"
 
-         - name: Setup Vale
-           if: ${{ !inputs.skip_vale }}
-           run: |
-              # Install Vale
-              wget -O vale.tar.gz https://github.com/errata-ai/vale/releases/latest/download/vale_Linux_64-bit.tar.gz
-              tar -xzf vale.tar.gz
-              sudo mv vale /usr/local/bin/
+      - name: Setup Vale
+        if: ${{ !inputs.skip_vale }}
+        run: |
+          # Install Vale
+          wget -O vale.tar.gz https://github.com/errata-ai/vale/releases/latest/download/vale_Linux_64-bit.tar.gz
+          tar -xzf vale.tar.gz
+          sudo mv vale /usr/local/bin/
 
-              # Check for Vale config
-              if [ -f "${{ inputs.vale_config }}" ]; then
-                echo "✅ Vale configuration found: ${{ inputs.vale_config }}"
-              else
-                echo "⚠️ Vale config not found, using basic configuration"
-                cat > .vale.ini << 'EOF'
-              StylesPath = .vale/styles
-              MinAlertLevel = suggestion
-              Packages = Microsoft, write-good
+          # Check for Vale config
+          if [ -f "${{ inputs.vale_config }}" ]; then
+            echo "✅ Vale configuration found: ${{ inputs.vale_config }}"
+          else
+            echo "⚠️ Vale config not found, using basic configuration"
+            cat > .vale.ini << 'EOF'
+          StylesPath = .vale/styles
+          MinAlertLevel = suggestion
+          Packages = Microsoft, write-good
 
-              [*]
-              BasedOnStyles = Vale, Microsoft, write-good
-              EOF
-              fi
+          [*]
+          BasedOnStyles = Vale, Microsoft, write-good
+          EOF
+          fi
 
-              vale sync
-              echo "✅ Vale setup complete"
+          vale sync
+          echo "✅ Vale setup complete"
 
-         - name: Lint Markdown syntax
-           run: |
-              echo "🔍 Checking Markdown syntax..."
+      - name: Lint Markdown syntax
+        run: |
+          echo "🔍 Checking Markdown syntax..."
 
-              if [ -f "${{ inputs.markdownlint_config }}" ]; then
-                echo "Using config: ${{ inputs.markdownlint_config }}"
-                markdownlint-cli2 "**/*.md" "#node_modules" "#.git" --config "${{ inputs.markdownlint_config }}"
-              else
-                echo "Using default markdownlint rules"
-                markdownlint-cli2 "**/*.md" "#node_modules" "#.git"
-              fi
+          if [ -f "${{ inputs.markdownlint_config }}" ]; then
+            echo "Using config: ${{ inputs.markdownlint_config }}"
+            markdownlint-cli2 "**/*.md" "#node_modules" "#.git" --config "${{ inputs.markdownlint_config }}"
+          else
+            echo "Using default markdownlint rules"
+            markdownlint-cli2 "**/*.md" "#node_modules" "#.git"
+          fi
 
-              echo "✅ Markdown syntax validation passed"
+          echo "✅ Markdown syntax validation passed"
 
-         - name: Check prose quality with Vale
-           if: ${{ !inputs.skip_vale }}
-           run: |
-              echo "📝 Checking prose quality with Vale..."
+      - name: Check prose quality with Vale
+        if: ${{ !inputs.skip_vale }}
+        run: |
+          echo "📝 Checking prose quality with Vale..."
 
-              # Run Vale on markdown files
-              if vale **/*.md; then
-                echo "✅ Vale prose quality check passed"
-              else
-                echo "⚠️ Vale found style issues (non-blocking)"
-                # Don't fail the build for Vale issues, just warn
-              fi
+          # Run Vale on markdown files
+          if vale **/*.md; then
+            echo "✅ Vale prose quality check passed"
+          else
+            echo "⚠️ Vale found style issues (non-blocking)"
+            # Don't fail the build for Vale issues, just warn
+          fi
 
-         - name: Check for broken links
-           if: ${{ inputs.check_links }}
-           run: |
-              echo "🔗 Checking for broken links..."
+      - name: Check for broken links
+        if: ${{ inputs.check_links }}
+        run: |
+          echo "🔗 Checking for broken links..."
 
-              # Find all markdown files and check links
-              find . -name "*.md" -not -path "./node_modules/*" -not -path "./.git/*" | while read -r file; do
-                echo "Checking links in: $file"
-                if markdown-link-check "$file" --config .github/link-check-config.json 2>/dev/null || markdown-link-check "$file"; then
-                  echo "✅ Links OK in $file"
+          # Find all markdown files and check links
+          find . -name "*.md" -not -path "./node_modules/*" -not -path "./.git/*" | while read -r file; do
+            echo "Checking links in: $file"
+            if markdown-link-check "$file" --config .github/link-check-config.json 2>/dev/null || markdown-link-check "$file"; then
+              echo "✅ Links OK in $file"
+            else
+              echo "⚠️ Broken links found in $file"
+              # Store failures but don't exit immediately
+              echo "$file" >> broken_links.txt
+            fi
+          done
+
+          # Report broken links but don't fail build
+          if [ -f broken_links.txt ]; then
+            echo "⚠️ Files with broken links:"
+            cat broken_links.txt
+            echo "Please review and fix broken links when possible"
+          else
+            echo "✅ All links appear to be working"
+          fi
+
+      - name: Check front matter schema (if present)
+        run: |
+          echo "📋 Checking front matter schema..."
+
+          # Look for YAML front matter in markdown files
+          if grep -r "^---$" --include="*.md" . >/dev/null 2>&1; then
+            echo "📄 Found YAML front matter in markdown files"
+            
+            # Basic validation - check for balanced --- markers
+            find . -name "*.md" -not -path "./node_modules/*" | while read -r file; do
+              if grep -q "^---$" "$file"; then
+                front_matter_count=$(grep -c "^---$" "$file")
+                if [ "$front_matter_count" -ge 2 ]; then
+                  echo "✅ Valid front matter structure in $file"
                 else
-                  echo "⚠️ Broken links found in $file"
-                  # Store failures but don't exit immediately
-                  echo "$file" >> broken_links.txt
+                  echo "⚠️ Incomplete front matter in $file"
                 fi
-              done
-
-              # Report broken links but don't fail build
-              if [ -f broken_links.txt ]; then
-                echo "⚠️ Files with broken links:"
-                cat broken_links.txt
-                echo "Please review and fix broken links when possible"
-              else
-                echo "✅ All links appear to be working"
               fi
+            done
+          else
+            echo "ℹ️ No YAML front matter found in markdown files"
+          fi
 
-         - name: Check front matter schema (if present)
-           run: |
-              echo "📋 Checking front matter schema..."
+      - name: Generate documentation report
+        if: always()
+        run: |
+          echo "## 📚 Documentation Quality Report" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
 
-              # Look for YAML front matter in markdown files
-              if grep -r "^---$" --include="*.md" . >/dev/null 2>&1; then
-                echo "📄 Found YAML front matter in markdown files"
-                
-                # Basic validation - check for balanced --- markers
-                find . -name "*.md" -not -path "./node_modules/*" | while read -r file; do
-                  if grep -q "^---$" "$file"; then
-                    front_matter_count=$(grep -c "^---$" "$file")
-                    if [ "$front_matter_count" -ge 2 ]; then
-                      echo "✅ Valid front matter structure in $file"
-                    else
-                      echo "⚠️ Incomplete front matter in $file"
-                    fi
-                  fi
-                done
-              else
-                echo "ℹ️ No YAML front matter found in markdown files"
-              fi
+          # Count markdown files
+          md_count=$(find . -name "*.md" -not -path "./node_modules/*" -not -path "./.git/*" | wc -l)
+          echo "**Markdown files processed**: $md_count" >> $GITHUB_STEP_SUMMARY
 
-         - name: Generate documentation report
-           if: always()
-           run: |
-              echo "## 📚 Documentation Quality Report" >> $GITHUB_STEP_SUMMARY
-              echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Checks performed**:" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Markdown syntax linting" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ inputs.skip_vale }}" != "true" ]; then
+            echo "- 📝 Prose quality (Vale)" >> $GITHUB_STEP_SUMMARY
+          fi
+          if [ "${{ inputs.check_links }}" = "true" ]; then
+            echo "- 🔗 Link validation" >> $GITHUB_STEP_SUMMARY
+          fi
+          echo "- 📋 Front matter validation" >> $GITHUB_STEP_SUMMARY
 
-              # Count markdown files
-              md_count=$(find . -name "*.md" -not -path "./node_modules/*" -not -path "./.git/*" | wc -l)
-              echo "**Markdown files processed**: $md_count" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Workflow**: \`docs-governance.yml@v1\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "_Documentation quality maintained by TAGS governance standards_" >> $GITHUB_STEP_SUMMARY
 
-              echo "**Checks performed**:" >> $GITHUB_STEP_SUMMARY
-              echo "- ✅ Markdown syntax linting" >> $GITHUB_STEP_SUMMARY
-              if [ "${{ inputs.skip_vale }}" != "true" ]; then
-                echo "- 📝 Prose quality (Vale)" >> $GITHUB_STEP_SUMMARY
-              fi
-              if [ "${{ inputs.check_links }}" = "true" ]; then
-                echo "- 🔗 Link validation" >> $GITHUB_STEP_SUMMARY
-              fi
-              echo "- 📋 Front matter validation" >> $GITHUB_STEP_SUMMARY
-
-              echo "" >> $GITHUB_STEP_SUMMARY
-              echo "**Workflow**: \`docs-governance.yml@v1\`" >> $GITHUB_STEP_SUMMARY
-              echo "" >> $GITHUB_STEP_SUMMARY
-              echo "_Documentation quality maintained by TAGS governance standards_" >> $GITHUB_STEP_SUMMARY
-
-         - name: Upload Vale report
-           if: ${{ !inputs.skip_vale && always() }}
-           uses: actions/upload-artifact@v4
-           with:
-              name: vale-report
-              path: |
-                 .vale/
-                 *.vale
-              retention-days: 7
-              if-no-files-found: ignore
+      - name: Upload Vale report
+        if: ${{ !inputs.skip_vale && always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: vale-report
+          path: |
+            .vale/
+            *.vale
+          retention-days: 7
+          if-no-files-found: ignore
